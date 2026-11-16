@@ -8,7 +8,7 @@
 > smoothing stage derive two knee points, and the present shader expands everything above the knee toward the panel's
 > EDR headroom while keeping BT.2087 hue and paper-white luminance fixed. Nine C test suites (458 assertions),
 > a reference CLI plus 20 self-checks run on plain Linux — no Xcode, no device needed. Patch applies cleanly on
-> upstream `0db515053e07` (2026-11-16). Everything is documented in Chinese; code identifiers and comments are bilingual
+> upstream `75eb430240da` (2026-11-16). Everything is documented in Chinese; code identifiers and comments are bilingual
 > enough to follow the math.
 >
 > **状态 / Status:** 算法层、C 侧接线、ObjC 语法闸门、上屏 MSL 编译均已通过；**未**做链接级与真机验证
@@ -64,15 +64,42 @@ SpecialK / BT.2087 / BT.2408-8 / Apple EDR / Microsoft scRGB，每条都写「�
 | 黑边/纯黑背景 | 分位被拽向暗端，暗部一片灰 | `-6 stops` 以下不计入统计 |
 | 硬切镜头 | 平滑把新场景拖成 4–8 秒渐变 | 按 log2 重心差分级，>1.6 stops 直接跳 |
 
+## 上游前进之后（`rebase_patch.sh`）
+
+补丁只对 `patch/BASELINE` 里那个提交负责。上游比你手上的基线新时，先跑这个，别硬 apply：
+
+```sh
+./scripts/rebase_patch.sh <sha>     # 或 --head；成功→输出候选补丁；冲突→出逐 hunk 工单
+./scripts/baseline_report.sh        # 只看距离：差多少提交、我们改过且上游也动过的文件与行数
+```
+
+**无损判据是往返，不是 `--dry-run`**：正向 `patch -p1` → 反向 `patch -R -p1` →
+`git status --porcelain` 必须为空。为空才说明「我们的 N 处改动都进了正确位置，上游新增内容也没被覆盖」；
+`--dry-run` 只证明上下文对得上。在基线上跑 `--check` 是恒等变换（候选补丁与主补丁 `cmp` 逐字节相同）。
+
+冲突时自动生成 `docs/BASELINE-MIGRATION.md`：每个被拒的 hunk 一节，给出「我们要插入什么（diff）」
+与「上游现在这段是什么（objc）」，行号按 hunk 的上下文锚点在新树里现搜（不用 `.rej` 里记的旧行号）。
+
+实测（2026-11-16）：基线 `0db51505` → 上游 `75eb4302`（371 个提交）时 `nvn_mtl.m` 4/9 hunk 冲突、
+`nvn_present_fi.inc` 1/7 冲突，根因是上游给 `present_blit` 新增 `int screen`（多屏）——属结构性合并，
+已按工单合并完并把基线升到 `75eb430240da`（`verify_upstream.sh` 全过）。合并后上游又前进了几个提交，
+这是常态：**基线只对写明的那个提交成立**。
+
+## 合规（可验证，不是承诺）
+
+这个仓库是**公开投影**：只有补丁、自写源码、文档、工具、脚本，加上上游的 `LICENSE`/`NOTICE`。
+不含上游整文件、不含构建产物、**不含 ` .github/`（因此物理上无法触发任何 runner）**。
+逐条纪律与实名事故复盘见 [docs/GITHUB-COMPLIANCE.md](docs/GITHUB-COMPLIANCE.md)，自检：`./scripts/check_projection.sh`。
+
 ## 打补丁
 
-目标基线：S2Arm `main` 的 **0db515053e07**（`0db515053e0763d597234faade2d4527982498b5`，2026-11-16；v0.4.0 `dcd05e5` 之后的提交）。
+目标基线：S2Arm `main` 的 **75eb430240da**（`75eb430240dae472ec834f98b47194d7ff2ff7e5`，2026-11-16；v0.4.0 `dcd05e5` 之后的提交；上一基线 `0db515053e07` 的历史实测仍保留在 docs/PR.md）。
 注意上游 tag 仍停在 v0.4.0 而 `main` 已前进数百个提交，本补丁对**这一个提交**验证通过，上游再动需重跑 `./scripts/verify_upstream.sh <新 sha>`。
 0.4.0 上游**没有**任何 HDR 代码（`nvn_hdr*` 全缺、全树 `S2A_HDR` 零命中），所以这个补丁是纯新增。
 
 ```bash
 git clone https://github.com/jhaizhou-ops/S2Arm.git s2arm && cd s2arm
-git checkout 0db515053e0763d597234faade2d4527982498b5
+git checkout 75eb430240dae472ec834f98b47194d7ff2ff7e5
 git apply -v /path/to/hdr-auto/patch/hdr-auto-l1.patch
 ```
 
@@ -80,6 +107,16 @@ git apply -v /path/to/hdr-auto/patch/hdr-auto-l1.patch
 
 ```bash
 ./verify.sh /path/to/s2arm     # 打补丁 → 编三套单测 → 跑
+./run_all.sh /path/to/s2arm    # 全部闸门：30 套 885 项 + 落点 + MSL 静态 + 10 份报告对账 + ASan/UBSan
+./scripts/sanitize.sh          # 只跑内存/UB 闸门（ASan+UBSan，halt_on_error=1，约 15 s）
+```
+
+改过 `src/` 之后**必须**重建补丁，否则所有验证都在验旧代码（踩过：补丁静默回退，全部结论作废）：
+
+```bash
+vim src/nvn_hdr.h              # src/ 是唯一真相源
+./scripts/make_patch.sh /path/to/s2arm --force   # 回写树 → 重建 patch/hdr-auto-l1.patch → 自检
+./run_all.sh /path/to/s2arm
 ```
 
 本机实测（干净 0db515053e07 树，`cc -O2 -Wall -Wextra`）：
@@ -105,7 +142,7 @@ git apply -v /path/to/hdr-auto/patch/hdr-auto-l1.patch
 | 项 | 状态 |
 |---|---|
 | 参数层（纯 C） | ✅ **885** 条断言（30 套）全绿，可在 Linux/CI 复跑；含四场景 nit 量化（`t_hdr_quality`） |
-| 补丁可打性 | ✅ 干净 `0db515053e07` 树 `git apply` rc=0 |
+| 补丁可打性 | ✅ 干净 `75eb430240da` 树 `git apply` rc=0 |
 | MSL 语法 | ✅ CI `hdr-check` 用 `xcrun -sdk iphoneos metal -std=metal3.0 -c` 真编译（第一次就抓出 MSL 无 `double`，已改 float） |
 | 嵌入规则 | ✅ 本机 `embed_msl.py` 产出 7,756 B 头文件 |
 | GPU 侧接线 | ✅ `present_encode_slot` 每 8 帧（`S2A_HDR_HIST_EVERY`）跑 `clear→add→hdr_hist_l1` + blit 1 KB 直方图回 CPU；判定全在 CPU（真直方图），`float4` 只留作对账日志 |
@@ -258,7 +295,7 @@ python3 scripts/report.py     # 改完算法后重新生成
 ## 许可证
 
 本目录是 S2Arm（Apache-2.0）的**补丁与独立参考实现**，不含上游源码：`patch/hdr-auto-l1.patch`
-打在上游 `0db515053e07` 的干净树上。见 [LICENSE](LICENSE) 与 [NOTICE](NOTICE)。
+打在上游 `75eb430240da` 的干净树上。见 [LICENSE](LICENSE) 与 [NOTICE](NOTICE)。
 
 `.github/workflows/verify.yml` 是包内 CI：clone 上游 → 打补丁 → 跑全部闸门 + MSL/ObjC 真编译，
 推上 GitHub 或 fork 后可手动触发。

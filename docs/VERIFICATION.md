@@ -7,12 +7,12 @@
 
 ```bash
 ./run_all.sh                      # 不需要 S2Arm 树：自检 + 敏感度 + 曲线图
-./run_all.sh /tmp/v06             # 额外：把补丁打进干净 0db515053e07 树跑三十套单测（885 项）
+./run_all.sh /tmp/v08             # 额外：把补丁打进干净 75eb430240da 树跑三十套单测（885 项）
 ```
 
 `run_all.sh` 返回 0 才算通过。步骤：`0/5` 量化报告 → `1/5` 参考 CLI → `2/5` HUD 平台区 →
 `3/5` 曲线图 → `3b/5` 平台阶 → `4/5` 补丁自洽 + 十四套单测 → `0g/5` 消融 → `0h/5` 转场序列 →
-`0i/5` 每帧开销（实测控制器一次调用 0.57 µs，上限 5 µs）→ `0j/5` 对照图（12 张图的指纹清单）→ `0k/5` BT.2408 放置方式 → `0l/5` 画幅与黑边 → `0m/5` GPU/CPU 分箱对账 → `0n/5` L0 分位对账 → `0o/5` 上屏 shader 对账 → `0p/5` 运行期 headroom → `0q/5` 回读控制流 → `0u/5` knee 发布/消费 → `0v/5` 图像级用例 → `0w/5` 颜色保真 → `0e7/5` ASan+UBSan（30 套 15s）→ `0w7/5` 基线一致。它不做的事：
+`0i/5` 每帧开销（实测控制器一次调用 0.57 µs，上限 5 µs）→ `0j/5` 对照图（12 张图的指纹清单）→ `0k/5` BT.2408 放置方式 → `0l/5` 画幅与黑边 → `0m/5` GPU/CPU 分箱对账 → `0n/5` L0 分位对账 → `0o/5` 上屏 shader 对账 → `0p/5` 运行期 headroom → `0q/5` 回读控制流 → `0u/5` knee 发布/消费 → `0v/5` 图像级用例 → `0w/5` 颜色保真 → `0e7/5` ASan+UBSan（30 套 15s）→ `0w7/5` 基线一致 → `0w8/5` README 与仓库一致（引用的路径都存在、9 个入口脚本都被写进 README）。它不做的事：
 编译 MSL、编译 ObjC、链接、真机——见文末。
 
 ## 每帧开销
@@ -26,7 +26,7 @@
 
 | 结论 | 命令 | 期望 |
 |---|---|---|
-| 补丁能在干净 `0db515053e07` 上无冲突应用 | `git apply --check patch/hdr-auto-l1.patch`（在干净树） | 0 退出；41 个文件 |
+| 补丁能在干净 `75eb430240da` 上无冲突应用 | `git apply --check patch/hdr-auto-l1.patch`（在干净树） | 0 退出；41 个文件 |
 | 补丁文件指纹 | `sha256sum patch/hdr-auto-l1.patch` | `8ecb6d9b…`（23 文件，+3650 行） |
 | MSL 能按 Makefile 规则嵌入 | `python3 graphics/metal/tools/embed_msl.py graphics/nvn/shaders/hdr_hist.metal k_hdr_hist out.h` | 7,948 B |
 

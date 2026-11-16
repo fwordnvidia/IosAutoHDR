@@ -75,6 +75,14 @@ p = ROOT / 'patch/hdr-auto-l1.patch'
 if not p.exists() or p.stat().st_size < 10000:
     fails.append('patch/hdr-auto-l1.patch 缺失或异常小')
 
+
+# 5) patch/ 下只允许三件东西：主补丁、BASELINE、src.manifest。
+#    候选补丁（hdr-auto-l1.<sha>.patch）是 rebase_patch.sh 的临时产物，绝不能留在仓库里被当成主补丁。
+allowed = {'hdr-auto-l1.patch', 'BASELINE', 'src.manifest'}
+extra = sorted(p.name for p in (ROOT / 'patch').iterdir() if p.name not in allowed)
+if extra:
+    fails.append('patch/ 下有非预期文件（候选补丁用完要删）：' + '、'.join(extra))
+
 if fails:
     for f in fails:
         print(f'::error::{f}')

@@ -1686,10 +1686,10 @@ index 00000000..a001187a
 +
 +#endif
 diff --git a/graphics/nvn/gfx/nvn/nvn_mtl.m b/graphics/nvn/gfx/nvn/nvn_mtl.m
-index fcaef4c5..a08d9d52 100644
+index 2f4b6491..71f60c0e 100644
 --- a/graphics/nvn/gfx/nvn/nvn_mtl.m
 +++ b/graphics/nvn/gfx/nvn/nvn_mtl.m
-@@ -713,7 +713,7 @@ void mtl_init(void) {
+@@ -748,7 +748,7 @@ void mtl_init(void) {
          g_present_args = [g_dev newArgumentTableWithDescriptor:pad error:&ate];
          if (!g_present_args) MDIE("failed to create the present argument table: %s", ate.localizedDescription.UTF8String);
          for (int i = 0; i < 3; i++) {
@@ -1698,7 +1698,7 @@ index fcaef4c5..a08d9d52 100644
              if (!g_present_uv[i]) MDIE("failed to create present UV buffer[%d]", i);
              res_add(g_present_uv[i]);
          }
-@@ -16484,17 +16484,139 @@ id<CAMetalDrawable> s2a_ios_reflection_drawable(CAMetalLayer *game) __attribute_
+@@ -17022,17 +17022,139 @@ id<CAMetalDrawable> s2a_ios_reflection_drawable(CAMetalLayer *game) __attribute_
  #endif
  void mtl_present_test_stall(uint64_t ns) { g_present_stall_ns = ns; }
  #include "nvn_present_aa.inc"
@@ -1839,15 +1839,15 @@ index fcaef4c5..a08d9d52 100644
          if (!lib) MDIE("present shader compile failed %s", e.localizedDescription.UTF8String);
          MTLRenderPipelineDescriptor *pd = [MTLRenderPipelineDescriptor new];
          pd.vertexFunction = [lib newFunctionWithName:@"vs"]; pd.fragmentFunction = [lib newFunctionWithName:@"fs"];
-@@ -16525,6 +16647,7 @@ static id<MTLTexture> present_raw_src(id<MTLTexture> src) {
+@@ -17063,6 +17185,7 @@ static id<MTLTexture> present_raw_src(id<MTLTexture> src) {
  __attribute__((weak)) double s2a_cpatch_present_aspect(void) { return 0; }   // native runtime/src/cpatch.c: current aspect while an adaptive community widescreen patch is on; graphics unit tests without the host have none
  #include "nvn_present_fit.h"   // pf_crop_fit (present_now) / pf_viewport (both blits); plain C, tested by graphics/nvn/tests/t_present_fit.c
- static int present_blit(id<MTLCommandBuffer> cb, id<MTLTexture> src, id<MTLTexture> dst, const int crop[4], BOOL flip) {
-+    hdr_head_tick();
+ static int present_blit(id<MTLCommandBuffer> cb, id<MTLTexture> src, id<MTLTexture> dst, const int crop[4], BOOL flip, int screen) {
++    hdr_head_tick();   // 自动 HDR：每帧读一次 layer 的 EDR 上界（用户拖亮度/换屏后 head 要跟着走）
      NSUInteger cx = 0, cy = 0, cw = src.width, ch = src.height;
      if (crop && (crop[2] || crop[3])) {
          if (crop[0] < 0 || crop[1] < 0 || crop[2] <= 0 || crop[3] <= 0 ||
-@@ -16553,8 +16676,12 @@ static int present_blit(id<MTLCommandBuffer> cb, id<MTLTexture> src, id<MTLTextu
+@@ -17093,8 +17216,12 @@ static int present_blit(id<MTLCommandBuffer> cb, id<MTLTexture> src, id<MTLTextu
      id<MTLRenderCommandEncoder> en = [cb renderCommandEncoderWithDescriptor:rp];
      [en setViewport:vp];
      [en setRenderPipelineState:g_blit_pso]; [en setFragmentTexture:present_raw_src(src) atIndex:0]; [en setFragmentSamplerState:g_blit_samp atIndex:0];
@@ -1862,15 +1862,15 @@ index fcaef4c5..a08d9d52 100644
      if (flip) { uv[1] += uv[3]; uv[3] = -uv[3]; }   // lower-left origin: the window image is stored bottom-up
      [en setFragmentBytes:uv length:sizeof uv atIndex:0];
      [en drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
-@@ -16562,6 +16689,7 @@ static int present_blit(id<MTLCommandBuffer> cb, id<MTLTexture> src, id<MTLTextu
+@@ -17102,6 +17229,7 @@ static int present_blit(id<MTLCommandBuffer> cb, id<MTLTexture> src, id<MTLTextu
      return 1;
  }
- static int present_blit_m4(id<MTL4CommandBuffer> cb, id<MTLTexture> src, id<MTLTexture> dst, const int crop[4], id<MTLBuffer> uvBuffer, id table, BOOL flip) {
+ static int present_blit_m4(id<MTL4CommandBuffer> cb, id<MTLTexture> src, id<MTLTexture> dst, const int crop[4], id<MTLBuffer> uvBuffer, id table, BOOL flip, int screen) {
 +    hdr_head_tick();
      NSUInteger cx = 0, cy = 0, cw = src.width, ch = src.height;
      if (crop && (crop[2] || crop[3])) {
          if (crop[0] < 0 || crop[1] < 0 || crop[2] <= 0 || crop[3] <= 0 ||
-@@ -16588,6 +16716,13 @@ static int present_blit_m4(id<MTL4CommandBuffer> cb, id<MTLTexture> src, id<MTLT
+@@ -17130,6 +17258,13 @@ static int present_blit_m4(id<MTL4CommandBuffer> cb, id<MTLTexture> src, id<MTLT
      float *uv = uvBuffer.contents;
      uv[0] = (float)cx / src.width; uv[1] = (float)cy / src.height; uv[2] = (float)cw / src.width; uv[3] = (float)ch / src.height;
      uv[4] = (cx + 0.5f) / src.width; uv[5] = (cy + 0.5f) / src.height; uv[6] = (cx + cw - 0.5f) / src.width; uv[7] = (cy + ch - 0.5f) / src.height;
@@ -1884,7 +1884,7 @@ index fcaef4c5..a08d9d52 100644
      if (flip) { uv[1] += uv[3]; uv[3] = -uv[3]; }   // normalized AA input is already upright
      tab_buf(table, uvBuffer, 0, 0);
      [en setViewport:vp]; [en setRenderPipelineState:g_blit_pso];
-@@ -16613,11 +16748,17 @@ static const int *rs_aa_crop(id<MTLTexture> src, id<MTLTexture> dst, const int c
+@@ -17155,11 +17290,17 @@ static const int *rs_aa_crop(id<MTLTexture> src, id<MTLTexture> dst, const int c
  }
  // mirror (iOS split-view reflection, may be nil): the final picture drawn a second time into the small reflection drawable,
  //   by the same blit with the same inputs as the one into dst (ios/play_reflection.m s2a_ios_reflection_drawable)
@@ -1894,31 +1894,33 @@ index fcaef4c5..a08d9d52 100644
 +    hdr_hist_tick(cb, src);
      BOOL flip = atomic_load_explicit(&g_origin_ll, memory_order_relaxed) != 0;
 -    NvPresentFX *fx = present_fx_for(slot, src, dst, crop, NO);
--    if (!g_present_aa && !fx) return present_blit(cb, src, dst, crop, flip) && (!mirror || present_blit(cb, src, mirror, crop, flip));
+-    if (!g_present_aa && !fx) return present_blit(cb, src, dst, crop, flip, 1) && (!mirror || present_blit(cb, src, mirror, crop, flip, 1));
 +    // HDR 画布（16F）：AA / MetalFX 空间放大的内部图与上屏管线仍是 8 位，直接叠上去会管线/画布不匹配。
 +    //   本轮先按「不启用」处理并告警一次；16F 版的 AA / 放大留到下一步（见 hdr-auto/docs/DESIGN.md 未做项）
 +    int hdr_dst = (dst && dst.pixelFormat == MTLPixelFormatRGBA16Float);
 +    if (hdr_dst && (g_present_aa || g_present_fx)) { static int once; if (!once++) MLOG("【黄】HDR：16F 画布下暂不叠加 AA / MetalFX 空间放大（8 位管线还没做 16F 版）"); }
 +    NvPresentFX *fx = hdr_dst ? NULL : present_fx_for(slot, src, dst, crop, NO);
-+    if ((!g_present_aa || hdr_dst) && !fx) return present_blit(cb, src, dst, crop, flip) && (!mirror || present_blit(cb, src, mirror, crop, flip));
++    if ((!g_present_aa || hdr_dst) && !fx) return present_blit(cb, src, dst, crop, flip, 1) && (!mirror || present_blit(cb, src, mirror, crop, flip, 1));
      id<MTLTexture> out;
      if (g_present_aa) {
          int ac[4]; NvPresentAA *s = present_aa_prepare(slot, src, rs_aa_crop(src, dst, crop, fx, ac));   // rs_aa_crop
-@@ -16644,9 +16785,11 @@ API_AVAILABLE(macos(26.0), ios(26.0))
+@@ -17186,9 +17327,13 @@ API_AVAILABLE(macos(26.0), ios(26.0))
  static int present_encode_m4(id<MTL4CommandBuffer> cb, id<MTLTexture> src, id<MTLTexture> dst, id<MTLTexture> mirror, const int crop[4], int slot) {
      present_options();
      BOOL flip = atomic_load_explicit(&g_origin_ll, memory_order_relaxed) != 0;
 -    NvPresentFX *fx = present_fx_for(slot, src, dst, crop, YES);
++    // HDR 画布（16F）：AA / MetalFX 空间放大的内部图与上屏管线仍是 8 位，直接叠上去会管线/画布不匹配。
++    //   本轮先按「不启用」处理并告警一次；16F 版的 AA / 放大留到下一步（见 hdr-auto/docs/DESIGN.md 未做项）
 +    int hdr_dst = (dst && dst.pixelFormat == MTLPixelFormatRGBA16Float);
 +    if (hdr_dst && (g_present_aa || g_present_fx)) { static int once; if (!once++) MLOG("【黄】HDR：16F 画布下暂不叠加 AA / MetalFX 空间放大（8 位管线还没做 16F 版）"); }
 +    NvPresentFX *fx = hdr_dst ? NULL : present_fx_for(slot, src, dst, crop, YES);
      // The mirror blit writes the same values into the same parameter buffer / table as the blit before it
--    if (!g_present_aa && !fx) return present_blit_m4(cb, src, dst, crop, g_present_uv[slot], g_present_args, flip) && (!mirror || present_blit_m4(cb, src, mirror, crop, g_present_uv[slot], g_present_args, flip));
-+    if ((!g_present_aa || hdr_dst) && !fx) return present_blit_m4(cb, src, dst, crop, g_present_uv[slot], g_present_args, flip) && (!mirror || present_blit_m4(cb, src, mirror, crop, g_present_uv[slot], g_present_args, flip));
+-    if (!g_present_aa && !fx) return present_blit_m4(cb, src, dst, crop, g_present_uv[slot], g_present_args, flip, 1) && (!mirror || present_blit_m4(cb, src, mirror, crop, g_present_uv[slot], g_present_args, flip, 1));
++    if ((!g_present_aa || hdr_dst) && !fx) return present_blit_m4(cb, src, dst, crop, g_present_uv[slot], g_present_args, flip, 1) && (!mirror || present_blit_m4(cb, src, mirror, crop, g_present_uv[slot], g_present_args, flip, 1));
      id<MTLTexture> out;
      if (g_present_aa) {
          int ac[4]; NvPresentAA *s = present_aa_prepare(slot, src, rs_aa_crop(src, dst, crop, fx, ac));   // rs_aa_crop
-@@ -16811,7 +16954,47 @@ static int present_now(const tex_t *t, double period, uint64_t frame, uint64_t t
+@@ -17353,7 +17498,47 @@ static int present_now(const tex_t *t, double period, uint64_t frame, uint64_t t
      uint64_t dt0 = now_ns();
      id<CAMetalDrawable> dr = supplied ? supplied : [layer nextDrawable];
      if (!supplied) g_drawable_ns += now_ns() - dt0;
@@ -1968,7 +1970,7 @@ index fcaef4c5..a08d9d52 100644
  #if TARGET_OS_IPHONE
      id<CAMetalDrawable> mdr = s2a_ios_reflection_drawable ? s2a_ios_reflection_drawable(layer) : nil;
 diff --git a/graphics/nvn/gfx/nvn/nvn_present_fi.inc b/graphics/nvn/gfx/nvn/nvn_present_fi.inc
-index 2487474e..8ad33803 100644
+index b8a27bf1..b8222954 100644
 --- a/graphics/nvn/gfx/nvn/nvn_present_fi.inc
 +++ b/graphics/nvn/gfx/nvn/nvn_present_fi.inc
 @@ -14,6 +14,7 @@ API_AVAILABLE(macos(26.0), ios(26.0))
@@ -1979,7 +1981,7 @@ index 2487474e..8ad33803 100644
      id<MTLTexture> in_tex[3], mid_tex, depth, motion;   // 输入图三张轮换（这一帧 / 上一帧 / 出图线程正在写的下一帧，读写不撞同一张）、补出的帧、常数深度、零运动
      id<MTLFXFrameInterpolator> mfx; id<MTLCommandQueue> mq;   // MetalFX 帧插值在自己的 Metal 命令队列上编码
      id<MTLRenderPipelineState> psoCopy;
-@@ -147,7 +148,7 @@ static int fi_copy_setup(NvPresentFI *f) {
+@@ -158,7 +159,7 @@ static int fi_copy_setup(NvPresentFI *f) {
      NSError *e = nil; id<MTLLibrary> lib = [g_dev newLibraryWithSource:@(msl) options:nil error:&e];
      if (!lib) { MLOG("【红】 frame interpolation shader: %s", e.localizedDescription.UTF8String); return 0; }
      MTLRenderPipelineDescriptor *pd = [MTLRenderPipelineDescriptor new];
@@ -1988,7 +1990,7 @@ index 2487474e..8ad33803 100644
      f->psoCopy = [g_dev newRenderPipelineStateWithDescriptor:pd error:&e];
      if (!f->psoCopy) { MLOG("【红】 frame interpolation pipeline: %s", e.localizedDescription.UTF8String); return 0; }
      return 1;
-@@ -160,7 +161,7 @@ static NvPresentFI *fi_get(CAMetalLayer *layer, NSUInteger cw, NSUInteger ch) {
+@@ -171,7 +172,7 @@ static NvPresentFI *fi_get(CAMetalLayer *layer, NSUInteger cw, NSUInteger ch) {
      static int maxh = -1; if (maxh < 0) { const char *e = getenv("DM_PRESENT_FI_MAXH"); maxh = e && atoi(e) > 0 ? atoi(e) : 1080; }
      double s = ch > (NSUInteger)maxh ? (double)maxh / ch : 1;
      int iw = (int)(cw * s) & ~1, ih = (int)(ch * s) & ~1;
@@ -1997,7 +1999,7 @@ index 2487474e..8ad33803 100644
      if (f && (f->w != iw || f->h != ih)) {   // 画面比例变了（11-13 iPhone 实机：开局竖屏、几秒后转横屏）：插值器的输入尺寸是建时定死的，等在途的活做完、整个重建
          dispatch_sync(f->q, ^{});
          MLOG("present frame interpolation: the game picture changed to %lux%lu (input %dx%d → %dx%d), rebuilding", (unsigned long)cw, (unsigned long)ch, f->w, f->h, iw, ih);
-@@ -176,11 +177,23 @@ static NvPresentFI *fi_get(CAMetalLayer *layer, NSUInteger cw, NSUInteger ch) {
+@@ -187,11 +188,23 @@ static NvPresentFI *fi_get(CAMetalLayer *layer, NSUInteger cw, NSUInteger ch) {
          static int mvq = -1; if (mvq < 0) { const char *e = getenv("DM_PRESENT_FI_MVQ"); mvq = !(e && !strcmp(e, "0")); if (mvq) MLOG("present frame interpolation: motion / depth at quarter size (DM_PRESENT_FI_MVQ=0 for full size)"); }
          int mw = mvq && fi_mv_mode() ? iw / 4 : iw, mh = mvq && fi_mv_mode() ? ih / 4 : ih;
          d.outputWidth = (NSUInteger)iw; d.outputHeight = (NSUInteger)ih; d.inputWidth = (NSUInteger)mw; d.inputHeight = (NSUInteger)mh;
@@ -2025,7 +2027,7 @@ index 2487474e..8ad33803 100644
          f->depth = fi_tex(MTLPixelFormatR32Float, mw, mh, f->mfx.depthTextureUsage | MTLTextureUsageRenderTarget);
          f->motion = fi_tex(MTLPixelFormatRG16Float, mw, mh, f->mfx.motionTextureUsage | MTLTextureUsageRenderTarget | MTLTextureUsageShaderWrite);
          if (!f->in_tex[0] || !f->in_tex[1] || !f->in_tex[2] || !f->mid_tex || !f->depth || !f->motion) { fi_off("cannot create the interpolation textures"); return nil; }
-@@ -191,7 +204,12 @@ static NvPresentFI *fi_get(CAMetalLayer *layer, NSUInteger cw, NSUInteger ch) {
+@@ -202,7 +215,12 @@ static NvPresentFI *fi_get(CAMetalLayer *layer, NSUInteger cw, NSUInteger ch) {
              [[c renderCommandEncoderWithDescriptor:rp] endEncoding]; [c commit]; [c waitUntilCompleted];
          }
          NSError *te = nil;
@@ -2039,7 +2041,7 @@ index 2487474e..8ad33803 100644
          for (int i = 0; i < 3; i++) { f->alloc[i] = [g_dev newCommandAllocator]; f->cb[i] = [g_dev newCommandBuffer]; f->slot_free[i] = dispatch_semaphore_create(1); if (!f->alloc[i] || !f->cb[i]) { fi_off("cannot create the command buffers"); return nil; } }
          f->q = dispatch_queue_create("dm.nvn.present-fi", dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_USER_INTERACTIVE, 0)); f->last_seq = UINT64_MAX;
          if (!fi_copy_setup(f)) { fi_off("cannot create the copy pipeline"); return nil; }
-@@ -246,7 +264,7 @@ API_AVAILABLE(macos(26.0), ios(26.0))
+@@ -257,7 +275,7 @@ API_AVAILABLE(macos(26.0), ios(26.0))
  static int fi_commit(NvPresentFI *f, int s, id<CAMetalDrawable> dr, int (^enc)(id cb), void (^after)(int ok)) {
      dispatch_semaphore_wait(f->slot_free[s], DISPATCH_TIME_FOREVER);
      pthread_mutex_lock(&g_fi_enc_mu);
@@ -2048,23 +2050,21 @@ index 2487474e..8ad33803 100644
      if (dr) [g_q4 waitForDrawable:dr];
      id cb = f->cb[s]; m4_begin_on(cb, f->alloc[s]);
      int ok = enc(cb);
-@@ -302,7 +320,13 @@ static void fi_job(NvPresentFI *f, CAMetalLayer *layer, id<MTLTexture> src, fi_c
+@@ -317,7 +335,11 @@ static void fi_job(NvPresentFI *f, CAMetalLayer *layer, id<MTLTexture> src, fi_c
      //   两侧黑边隔一帧一有，看着闪）：有补丁画幅就按它，没有照旧按输入图比例
      double pa = s2a_cpatch_present_aspect();
      if (have_mid) { id<CAMetalDrawable> dm = [layer nextDrawable]; NSUInteger vh = (NSUInteger)f->h, vw = pa > 0 ? (NSUInteger)llround(f->h * pa) : (NSUInteger)f->w;
--        if (dm && fi_commit(f, 1, dm, ^int(id cb) { return dup ? present_blit_m4(cb, src, dm.texture, crop, f->uv[2], f->tab[2], flip) : fi_pass(cb, f->psoCopy, f->tab[2], f->uv[2], mid, nil, dm.texture, NULL, NO, vw, vh); }, nil)) { fi_count_on(dm, &g_fi_on_mid); [dm present]; mid_shown = 1; f->shown_mid++; } }
-+        if (dm && fi_commit(f, 1, dm, ^int(id cb) { return dup ? present_blit_m4(cb, src, dm.texture, crop, f->uv[2], f->tab[2], flip)
-+                                                         : (f->cfmt == MTLPixelFormatRGBA16Float
-+                                                            // 16F：补出的帧也必须过同一遍扩张。mid 里是 MetalFX 在**未扩张**域里插出来的值
-+                                                            //（in_tex 是 src 的原样缩拷），所以这里再做一次扩张与真帧对称，不多不少。
-+                                                            // 用 psoCopy（纯拷贝）会让补出的帧比真帧暗 head 倍——60→120 Hz 隔帧一亮一暗。
-+                                                            ? present_blit_m4(cb, mid, dm.texture, NULL, f->uv[2], f->tab[2], flip)
-+                                                            : fi_pass(cb, f->psoCopy, f->tab[2], f->uv[2], mid, nil, dm.texture, NULL, NO, vw, vh)); }, nil)) { fi_count_on(dm, &g_fi_on_mid); [dm present]; mid_shown = 1; f->shown_mid++; } }
+-        if (dm && fi_commit(f, 1, dm, ^int(id cb) { return dup ? present_blit_m4(cb, src, dm.texture, crop, f->uv[2], f->tab[2], flip, 1) : fi_pass(cb, f->psoCopy, f->tab[2], f->uv[2], mid, nil, dm.texture, NULL, NO, vw, vh); }, nil)) { fi_count_on(dm, &g_fi_on_mid); [dm present]; mid_shown = 1; f->shown_mid++; } }
++        if (dm && fi_commit(f, 1, dm, ^int(id cb) {
++                // 16F：补出的帧也必须过同一遍扩张。mid 里是 MetalFX 在**未扩张**域里插出来的值（in_tex 是 src 的原样缩拷），
++                //   所以这里再做一次扩张与真帧对称，不多不少。用 psoCopy（纯拷贝）会让补出的帧比真帧暗 head 倍 ⇒ 60→120 Hz 隔帧一亮一暗。
++                if (f->cfmt == MTLPixelFormatRGBA16Float) return present_blit_m4(cb, mid, dm.texture, NULL, f->uv[2], f->tab[2], flip, 1);
++                return dup ? present_blit_m4(cb, src, dm.texture, crop, f->uv[2], f->tab[2], flip, 1) : fi_pass(cb, f->psoCopy, f->tab[2], f->uv[2], mid, nil, dm.texture, NULL, NO, vw, vh); }, nil)) { fi_count_on(dm, &g_fi_on_mid); [dm present]; mid_shown = 1; f->shown_mid++; } }
      id<CAMetalDrawable> dr = [layer nextDrawable];
-     if (dr && fi_commit(f, 2, dr, ^int(id cb) { return present_blit_m4(cb, src, dr.texture, crop, f->uv[3], f->tab[3], flip); }, ^(int ok) { (void)ok; fi_ticket_done(ticket); })) {
+     if (dr && fi_commit(f, 2, dr, ^int(id cb) { return present_blit_m4(cb, src, dr.texture, crop, f->uv[3], f->tab[3], flip, 1); }, ^(int ok) { (void)ok; fi_ticket_done(ticket); })) {
  #if !TARGET_OS_SIMULATOR
 diff --git a/graphics/nvn/host_adapt.m b/graphics/nvn/host_adapt.m
-index ad249f04..54a756a9 100644
+index cd6ae412..8379a88a 100644
 --- a/graphics/nvn/host_adapt.m
 +++ b/graphics/nvn/host_adapt.m
 @@ -14,6 +14,7 @@
@@ -2075,7 +2075,7 @@ index ad249f04..54a756a9 100644
  #include "gfx/nvn/nvn_present_fit.h"   // pf_viewport：出图层在视图里的摆放与出图层内画面的摆放同一条规则（差 < 1% 铺满）
  #include <TargetConditionals.h>
  #include <sys/stat.h>
-@@ -260,6 +261,31 @@ void s2a_direct_relayout(void) {   // App 壳视图控制器 viewDidLayoutSubvie
+@@ -263,6 +264,31 @@ void s2a_direct_relayout(void) {   // App 壳视图控制器 viewDidLayoutSubvie
          re ? "，宽屏核心下一个渲染遍按新比例出图" : "");
      if (!re && fabs(va / g_out_a - 1) > 0.01) LOG("【黄】直连：可用区域比例 %.3f 与出图比例 %.3f 不同，按实际出图比例居中；固定尺寸的路径须重新启动游戏后应用新比例", va, g_out_a);
  }
@@ -2107,7 +2107,7 @@ index ad249f04..54a756a9 100644
  void *front_metal_layer(void) {
      static dispatch_once_t once;
      dispatch_once(&once, ^{
-@@ -267,9 +293,10 @@ void *front_metal_layer(void) {
+@@ -270,9 +296,10 @@ void *front_metal_layer(void) {
          void (^mk)(void) = ^{
              UIView *v = present_view(); if (!v) return;
              CAMetalLayer *l = [CAMetalLayer layer];
@@ -2119,7 +2119,7 @@ index ad249f04..54a756a9 100644
              // 挂在最底层（11-02）：原先 addSublayer 压在根视图所有子视图之上，加载页 / 提示页（没设 zPosition）全被黑色出图层盖住——
              //   怪猎测试设备1 冷首启预热 64 秒，屏上只有手柄（手柄与开发浮层靠 zPosition 压过它），玩家对着黑屏点中了看不见的「先开始玩」
              if (s2a_ios_attach_game_layer) s2a_ios_attach_game_layer(v,l);
-@@ -299,7 +326,8 @@ void *front_metal_layer(void) {
+@@ -302,7 +329,8 @@ void *front_metal_layer(void) {
      dispatch_once(&once, ^{ f = (void *(*)(void))dlsym(RTLD_DEFAULT, "s2a_mac_front_layer"); });
      CAMetalLayer *l = f ? (__bridge CAMetalLayer *)f() : nil;
      if (l && l != set) {

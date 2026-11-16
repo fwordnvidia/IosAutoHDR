@@ -1,7 +1,7 @@
 # 给上游的 PR 说明（可直接粘贴）
 
 > 目标仓库：`jhaizhou-ops/S2Arm`（Apache-2.0）。本目录不是上游源码，而是**一个补丁包**：
-> `patch/hdr-auto-l1.patch` 基于 `main` 的 `0db515053e0763d597234faade2d4527982498b5`（2026-11-16）制作。
+> `patch/hdr-auto-l1.patch` 基于 `main` 的 `75eb430240dae472ec834f98b47194d7ff2ff7e5`（2026-11-16）制作。
 > 更早的版本基于 `v0.4.0`（`dcd05e5fa84c8c5c68b6ba66e3b1c6de016636ae`），基线迁移时把 8 处补帧改动
 > 重放到上游新版 `nvn_present_fi.inc` 与 `nvn_mtl.m`（上游在这两个文件里新增了 `fi_may_take_drawable()`、
 > `s2a_cpatch_present_aspect()` 自适应画幅等，共 256 行），重放后反向摘除逐字节还原为上游原文。
@@ -99,6 +99,22 @@ MSL kernel、ObjC `.inc` 这些只在设备上执行的代码，编译不进本�
   跨黑场不跳、出暗区 1 帧到位；
 - 每帧开销：控制器一次调用 **0.57 µs**（30/60/120 Hz 相同），占 120 Hz 帧预算 0.007%；
 - 运行期 headroom：每帧读一次 EDR 上界（1% 死区），用户拖亮度/换屏后不再按旧 head 扩张。
+
+## 基线迁移（2026-11-16：`0db51505` → `75eb4302`，371 个提交）
+
+这次不是机械重放，是**结构性合并**——上游给上屏路径加了多屏参数，我们的注入点上下文全失效。
+
+| 上游改动 | 我们要跟着改的地方 |
+| --- | --- |
+| `present_blit(…, BOOL flip)` → `(…, BOOL flip, int screen)`；`present_blit_m4` 同样 | 两个函数首行的 `hdr_head_tick();` 重新插；**`screen=1` 只在画进画布那一次**（`0` 是拷进 AA/放大中间图，必须原样拷满，否则 #1169 SMAA 中/高左右留黑） |
+| `present_encode_slot` / `present_encode_m4` 重写（AA / MetalFX 分支结构变化） | `hdr_hist_tick(cb, src)`、`#include "nvn_hdr_hist.inc"`、`hdr_dst` 判定（16F 画布下 `fx=NULL`、不走 AA、告警一次）重新插进新结构，早退条件变成 `(!g_present_aa \|\| hdr_dst) && !fx` |
+| `fi_job` 中间帧分支带上了 `screen` 实参 | 16F 下中间帧改走 `present_blit_m4(cb, mid, dm.texture, NULL, …, flip, 1)`（`mid` 是 MetalFX 在**未扩张**域插出来的值，用 `fi_pass` 纯拷贝会让补出的帧比真帧暗 head 倍） |
+
+合并后必须核对的：`present_blit` / `present_blit_m4` 的**所有调用点**都带上了第 6 个实参（冲突列表不会报调用点，但不改就编译不过）。
+
+验证：`check_landing.py` 49/49（按函数范围断言，不按行号）、`run_all.sh /tmp/v08` rc=0（30 套 885 项 + ASan/UBSan + 10 份报告对账），补丁 41 文件 / 6673 行 / `sha256 f2e996e9771bda94…`。
+
+### 历史：`dcd05e5` → `0db51505`（机械重放，9 个 hunk 全带 offset、反向 `cmp` 逐字节相同）
 
 ## 基线迁移（上游前进后怎么跟）
 

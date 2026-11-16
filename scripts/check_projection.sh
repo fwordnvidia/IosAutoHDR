@@ -3,7 +3,9 @@
 #
 # 为什么放在仓库里而不是只在维护者机器上：本仓库的主张是「一个补丁交付，不含上游整文件、
 # 不含 CI、不含构建产物」。任何人都能 clone 下来跑这条命令核对，不必相信 README。
-# 用法：./scripts/check_projection.sh          （在仓库根目录跑）
+# 用法：./scripts/check_projection.sh          （在**公开投影的根目录**跑）
+#   注意：它检查的是「投影这个仓库声称的性质」。在开发工作树里跑会正确地失败——工作树里有上游整文件
+#   （nvn_mtl.m / host_adapt.m / nvn_present_fi.inc），投影里按设计没有。想核对投影，就 clone 投影再跑。
 set -u
 cd "$(dirname "$0")/.." || exit 1
 fail=0
