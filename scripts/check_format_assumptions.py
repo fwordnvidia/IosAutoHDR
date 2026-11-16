@@ -115,7 +115,7 @@ def main():
 
     out = os.path.join(HERE, "docs/UPSTREAM-ASSUMPTIONS.md")
     L = ["# 换了纹理格式之后，上游那些假设还成立吗\n",
-         "这份表由 `scripts/check_format_assumptions.py` 生成（`run_all.sh` 的 `0y/5` 会挡漂移）。\n",
+         "这份表由 `scripts/check_format_assumptions.py` 生成（`run_all.sh` 的 `0w13/5` 会挡漂移）。\n",
          "补丁把上屏画布从 `BGRA8Unorm` 换成 `RGBA16Float`（HDR）。换格式牵动的不是一处：补帧、",
          "直方图、拷贝管线、重采样 view 都读这块纹理。上游写这些代码时只有 8 位，所以很多假设是",
          "**隐含**的——pitch、字节/像素、像素值域、是否 sRGB 解码。这类假设错了不会崩、不会报错，只会画错。\n",
