@@ -139,6 +139,8 @@ for needle, what in (
 # knee 走 64 位原子发布：写入方在直方图回调里（三处更新都要发），读取方在两条 present 路径里
 inc_path = os.path.join(ROOT, "graphics/nvn/gfx/nvn/nvn_hdr_hist.inc")
 inc_lines = read(inc_path) if os.path.exists(inc_path) else []
+fi_path = os.path.join(ROOT, "graphics/nvn/gfx/nvn/nvn_present_fi.inc")
+fi_lines = read(fi_path) if os.path.exists(fi_path) else []
 pubs = sum(1 for ln in inc_lines if "s2a_hdr_knee_publish(&g_hdr_knee_pub" in ln)
 check(pubs >= 3, "nvn_hdr_hist.inc 的每处 knee 更新都走原子发布（≥3 处）", "实际 %d 处" % pubs)
 for fn in ("present_blit", "present_blit_m4"):
@@ -156,6 +158,21 @@ check(not knee_used, "hdr_hist_knee 仍然未被调度（若接上去，需同�
 # knee 全部在 CPU 侧按回读的真直方图算。曾经每 8 帧白跑一次单线程 256 格循环。
 l1_dispatched = any("setComputePipelineState:f->ps_l1" in ln for ln in inc_lines)
 check(not l1_dispatched, "hdr_hist_l1 不 dispatch（结果无人读；接回去要先补 HUD 簇剔除，见 t_hdr_gpu_l1）")
+
+# 补帧的运动估计必须和被补的帧在**同一个域**上：16F（线性、可 >1）输入时 down/spread 都要
+# 先转回 sRGB 编码域，否则 match 的 `best*1.02+0.05` 与 spread 的 `abs(...)<0.004`（按 8 位码值
+# 标定）失效。tools/fi_domain.c 实测：静止判定命中率 100% → 44~64%，界面会出现鬼影。
+for needle, what in (
+    (("static inline float3 to_enc(float3 c, uint enc)"), "MSL 里有 to_enc"),
+    (("float3 c = to_enc(src.read("), "down 的 luma 在编码域"),
+    (("abs(to_enc(cur.read(gp).rgb, enc) - to_enc(prev.read(gp).rgb, enc)) < 0.004"), "spread 的静止判定在编码域"),
+    (("uint32_t enc = (cur.pixelFormat == MTLPixelFormatRGBA16Float) ? 1u : 0u;"), "dispatch 侧按源格式设 enc"),
+    (("[en setBytes:&enc length:sizeof enc atIndex:0];"), "down 拿到 enc"),
+    (("[en setBytes:&enc length:sizeof enc atIndex:4];"), "spread 拿到 enc"),
+):
+    check(any(needle in ln for ln in fi_lines),
+          "补帧运动估计按编码域标定：%s" % what,
+          "nvn_present_fi.inc 里找不到 %r" % needle)
 
 # 降级之后必须能回来：present_now 里要有 rearm 试探，并且把三样状态一起恢复
 # （像素格式、EDR 开关、颜色空间）。少恢复一样就会出现「画面回来了但颜色发灰」。

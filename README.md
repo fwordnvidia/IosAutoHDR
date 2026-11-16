@@ -119,6 +119,7 @@ git apply -v /path/to/hdr-auto/patch/hdr-auto-l1.patch
 ./scripts/sanitize.sh          # 只跑内存/UB 闸门（ASan+UBSan，halt_on_error=1，约 15 s）
 ./scripts/check_callsites.py    # 调用点实参个数（上游改签名时 patch 只报定义，调用点全靠这条）
 ./scripts/check_device_coverage.py  # 设备侧代码登记表（哪些有对账、哪些写明不做的理由）
+./scripts/report_fi_domain.py --check  # 补帧的运动估计与 HDR 是否在同一个域
 ```
 
 改过 `src/` 之后**必须**重建补丁，否则所有验证都在验旧代码（踩过：补丁静默回退，全部结论作废）：

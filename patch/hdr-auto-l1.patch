@@ -1969,7 +1969,7 @@ index 2f4b6491..71f60c0e 100644
  #if TARGET_OS_IPHONE
      id<CAMetalDrawable> mdr = s2a_ios_reflection_drawable ? s2a_ios_reflection_drawable(layer) : nil;
 diff --git a/graphics/nvn/gfx/nvn/nvn_present_fi.inc b/graphics/nvn/gfx/nvn/nvn_present_fi.inc
-index b8a27bf1..b8222954 100644
+index b8a27bf1..93be56b2 100644
 --- a/graphics/nvn/gfx/nvn/nvn_present_fi.inc
 +++ b/graphics/nvn/gfx/nvn/nvn_present_fi.inc
 @@ -14,6 +14,7 @@ API_AVAILABLE(macos(26.0), ios(26.0))
@@ -1980,7 +1980,63 @@ index b8a27bf1..b8222954 100644
      id<MTLTexture> in_tex[3], mid_tex, depth, motion;   // 输入图三张轮换（这一帧 / 上一帧 / 出图线程正在写的下一帧，读写不撞同一张）、补出的帧、常数深度、零运动
      id<MTLFXFrameInterpolator> mfx; id<MTLCommandQueue> mq;   // MetalFX 帧插值在自己的 Metal 命令队列上编码
      id<MTLRenderPipelineState> psoCopy;
-@@ -158,7 +159,7 @@ static int fi_copy_setup(NvPresentFI *f) {
+@@ -89,9 +90,16 @@ API_AVAILABLE(macos(26.0), ios(26.0))
+ static int fi_mv_setup(NvPresentFI *f) {
+     static const char *msl =
+         "#include <metal_stdlib>\nusing namespace metal;\n"
+-        "kernel void down(texture2d<float, access::read> src [[texture(0)]], texture2d<float, access::write> dst [[texture(1)]], uint2 g [[thread_position_in_grid]]) {\n"
++        // HDR 的补帧输入是 RGBA16Float（线性、可 > 1），而这两段 MSL 里的阈值都是在 8 位
++        // sRGB 编码域上标定的：match 的 `best*1.02+0.05`、spread 的 `abs(...)<0.004`（≈1 个码值）。
++        // texture read 不解码，所以 16F 下必须先把线性值转回编码域，否则运动估计换了一个域：
++        // 实测「前后两帧一样」的命中率从 100% 掉到 44–64% ⇒ 静止的界面/字幕被判成动了、被搬走。
++        // tools/fi_domain.c 量的就是这件事。enc=1 表示输入是线性域、要转编码。
++        "static inline float3 to_enc(float3 c, uint enc) { if (!enc) return c; c = max(c, 0.0f);\n"
++        "  return select(1.055f * pow(c, 1.0f / 2.4f) - 0.055f, c * 12.92f, c <= 0.0031308f); }\n"
++        "kernel void down(texture2d<float, access::read> src [[texture(0)]], texture2d<float, access::write> dst [[texture(1)]], constant uint &enc [[buffer(0)]], uint2 g [[thread_position_in_grid]]) {\n"
+         "  if (g.x >= dst.get_width() || g.y >= dst.get_height()) return; float s = 0;\n"
+-        "  for (uint y = 0; y < 4; y++) for (uint x = 0; x < 4; x++) { float3 c = src.read(uint2(g.x * 4 + x, g.y * 4 + y)).rgb; s += dot(c, float3(0.299, 0.587, 0.114)); }\n"
++        "  for (uint y = 0; y < 4; y++) for (uint x = 0; x < 4; x++) { float3 c = to_enc(src.read(uint2(g.x * 4 + x, g.y * 4 + y)).rgb, enc); s += dot(c, float3(0.299, 0.587, 0.114)); }\n"
+         "  dst.write(float4(s / 16, 0, 0, 0), g); }\n"
+         "kernel void match(texture2d<float, access::read> cur [[texture(0)]], texture2d<float, access::read> prev [[texture(1)]], device float2* out [[buffer(0)]], constant uint2& nb [[buffer(1)]],\n"
+         "                  uint2 b [[threadgroup_position_in_grid]], uint2 t [[thread_position_in_threadgroup]], uint li [[thread_index_in_threadgroup]], uint sl [[thread_index_in_simdgroup]], uint sg [[simdgroup_index_in_threadgroup]]) {\n"
+@@ -109,13 +117,13 @@ static int fi_mv_setup(NvPresentFI *f) {
+         "    if (sl == 0) { uint bi = k2 & 0x3FFu; float best = as_type<float>(k2 & ~0x3FFu); int2 bd = int2(int(bi % 32) - 16, int(bi / 32) - 16);\n"
+         "      if (zsad <= best * 1.02 + 0.05) bd = int2(0);   // 不动或平坦处偏向零位移，免得乱跳\n"
+         "      out[b.y * nb.x + b.x] = float2(bd) * 4; } } }\n"
+-        "kernel void spread(device const float2* blk [[buffer(0)]], constant uint2& nb [[buffer(1)]], constant float& sign [[buffer(2)]], constant uint& sc [[buffer(3)]], texture2d<float, access::write> mv [[texture(0)]],\n"
++        "kernel void spread(device const float2* blk [[buffer(0)]], constant uint2& nb [[buffer(1)]], constant float& sign [[buffer(2)]], constant uint& sc [[buffer(3)]], constant uint& enc [[buffer(4)]], texture2d<float, access::write> mv [[texture(0)]],\n"
+         "                   texture2d<float, access::read> cur [[texture(1)]], texture2d<float, access::read> prev [[texture(2)]], uint2 g [[thread_position_in_grid]]) {\n"
+         "  if (g.x >= mv.get_width() || g.y >= mv.get_height()) return;\n"
+         "  uint2 gp = g * sc + sc / 2; float2 u = (float2(g) + 0.5) * float(sc) / 32.0 - 0.5; int2 i0 = int2(floor(u)); float2 t = u - float2(i0);\n"
+         "  int2 a = clamp(i0, int2(0), int2(nb) - 1), c = clamp(i0 + 1, int2(0), int2(nb) - 1);\n"
+         "  float2 v = mix(mix(blk[a.y * nb.x + a.x], blk[a.y * nb.x + c.x], t.x), mix(blk[c.y * nb.x + a.x], blk[c.y * nb.x + c.x], t.x), t.y);\n"
+-        "  if (all(abs(cur.read(gp).rgb - prev.read(gp).rgb) < 0.004)) v = float2(0);   // 前后两帧这个像素一样（界面、静止物体）：不动，免得跟着背景被搬走\n"
++        "  if (all(abs(to_enc(cur.read(gp).rgb, enc) - to_enc(prev.read(gp).rgb, enc)) < 0.004)) v = float2(0);   // 前后两帧这个像素一样（界面、静止物体）：不动，免得跟着背景被搬走\n"
+         "  mv.write(float4(v * sign, 0, 0), g); }\n";
+     NSError *e = nil; id<MTLLibrary> lib = [g_dev newLibraryWithSource:@(msl) options:nil error:&e];
+     if (!lib) { MLOG("【红】 frame interpolation motion shader: %s", e.localizedDescription.UTF8String); return 0; }
+@@ -134,7 +142,11 @@ API_AVAILABLE(macos(26.0), ios(26.0))
+ static void fi_mv_encode(NvPresentFI *f, id<MTLCommandBuffer> c, id<MTLTexture> cur, id<MTLTexture> prev, float sign) {
+     id<MTLComputeCommandEncoder> en = [c computeCommandEncoder];
+     MTLSize tg = MTLSizeMake(8, 8, 1);
++    // enc：源纹理是 16F ⇒ read 得到线性值，必须转回 sRGB 编码域，否则 match/spread 的阈值
++    // （按 8 位码值标定）失效——静止判定命中率实测 100% → 44~64%，界面上会看到鬼影。
++    uint32_t enc = (cur.pixelFormat == MTLPixelFormatRGBA16Float) ? 1u : 0u;
+     [en setComputePipelineState:f->mvDown];
++    [en setBytes:&enc length:sizeof enc atIndex:0];
+     [en setTexture:cur atIndex:0]; [en setTexture:f->lumaCur atIndex:1]; [en dispatchThreads:MTLSizeMake(f->qw, f->qh, 1) threadsPerThreadgroup:tg];
+     [en setTexture:prev atIndex:0]; [en setTexture:f->lumaPrev atIndex:1]; [en dispatchThreads:MTLSizeMake(f->qw, f->qh, 1) threadsPerThreadgroup:tg];
+     [en memoryBarrierWithScope:MTLBarrierScopeTextures];
+@@ -143,7 +155,7 @@ static void fi_mv_encode(NvPresentFI *f, id<MTLCommandBuffer> c, id<MTLTexture>
+     [en setBuffer:f->mvBlocks offset:0 atIndex:0]; [en setBytes:nb length:sizeof nb atIndex:1];
+     [en dispatchThreadgroups:MTLSizeMake(f->bw, f->bh, 1) threadsPerThreadgroup:MTLSizeMake(32, 32, 1)];   // 每块一组，组内 1024 线程各算一个位移（±16 → 32×32）
+     [en memoryBarrierWithScope:MTLBarrierScopeBuffers];
+-    [en setComputePipelineState:f->mvSpread]; [en setBuffer:f->mvBlocks offset:0 atIndex:0]; [en setBytes:nb length:sizeof nb atIndex:1]; [en setBytes:&sign length:4 atIndex:2]; uint32_t sc = (uint32_t)(f->w / f->motion.width); [en setBytes:&sc length:4 atIndex:3];
++    [en setComputePipelineState:f->mvSpread]; [en setBuffer:f->mvBlocks offset:0 atIndex:0]; [en setBytes:nb length:sizeof nb atIndex:1]; [en setBytes:&sign length:4 atIndex:2]; uint32_t sc = (uint32_t)(f->w / f->motion.width); [en setBytes:&sc length:4 atIndex:3]; [en setBytes:&enc length:sizeof enc atIndex:4];
+     [en setTexture:f->motion atIndex:0]; [en setTexture:cur atIndex:1]; [en setTexture:prev atIndex:2]; [en dispatchThreads:MTLSizeMake(f->motion.width, f->motion.height, 1) threadsPerThreadgroup:tg];
+     [en endEncoding];
+ }
+@@ -158,7 +170,7 @@ static int fi_copy_setup(NvPresentFI *f) {
      NSError *e = nil; id<MTLLibrary> lib = [g_dev newLibraryWithSource:@(msl) options:nil error:&e];
      if (!lib) { MLOG("【红】 frame interpolation shader: %s", e.localizedDescription.UTF8String); return 0; }
      MTLRenderPipelineDescriptor *pd = [MTLRenderPipelineDescriptor new];
@@ -1989,7 +2045,7 @@ index b8a27bf1..b8222954 100644
      f->psoCopy = [g_dev newRenderPipelineStateWithDescriptor:pd error:&e];
      if (!f->psoCopy) { MLOG("【红】 frame interpolation pipeline: %s", e.localizedDescription.UTF8String); return 0; }
      return 1;
-@@ -171,7 +172,7 @@ static NvPresentFI *fi_get(CAMetalLayer *layer, NSUInteger cw, NSUInteger ch) {
+@@ -171,7 +183,7 @@ static NvPresentFI *fi_get(CAMetalLayer *layer, NSUInteger cw, NSUInteger ch) {
      static int maxh = -1; if (maxh < 0) { const char *e = getenv("DM_PRESENT_FI_MAXH"); maxh = e && atoi(e) > 0 ? atoi(e) : 1080; }
      double s = ch > (NSUInteger)maxh ? (double)maxh / ch : 1;
      int iw = (int)(cw * s) & ~1, ih = (int)(ch * s) & ~1;
@@ -1998,7 +2054,7 @@ index b8a27bf1..b8222954 100644
      if (f && (f->w != iw || f->h != ih)) {   // 画面比例变了（11-13 iPhone 实机：开局竖屏、几秒后转横屏）：插值器的输入尺寸是建时定死的，等在途的活做完、整个重建
          dispatch_sync(f->q, ^{});
          MLOG("present frame interpolation: the game picture changed to %lux%lu (input %dx%d → %dx%d), rebuilding", (unsigned long)cw, (unsigned long)ch, f->w, f->h, iw, ih);
-@@ -187,11 +188,23 @@ static NvPresentFI *fi_get(CAMetalLayer *layer, NSUInteger cw, NSUInteger ch) {
+@@ -187,11 +199,23 @@ static NvPresentFI *fi_get(CAMetalLayer *layer, NSUInteger cw, NSUInteger ch) {
          static int mvq = -1; if (mvq < 0) { const char *e = getenv("DM_PRESENT_FI_MVQ"); mvq = !(e && !strcmp(e, "0")); if (mvq) MLOG("present frame interpolation: motion / depth at quarter size (DM_PRESENT_FI_MVQ=0 for full size)"); }
          int mw = mvq && fi_mv_mode() ? iw / 4 : iw, mh = mvq && fi_mv_mode() ? ih / 4 : ih;
          d.outputWidth = (NSUInteger)iw; d.outputHeight = (NSUInteger)ih; d.inputWidth = (NSUInteger)mw; d.inputHeight = (NSUInteger)mh;
@@ -2026,7 +2082,7 @@ index b8a27bf1..b8222954 100644
          f->depth = fi_tex(MTLPixelFormatR32Float, mw, mh, f->mfx.depthTextureUsage | MTLTextureUsageRenderTarget);
          f->motion = fi_tex(MTLPixelFormatRG16Float, mw, mh, f->mfx.motionTextureUsage | MTLTextureUsageRenderTarget | MTLTextureUsageShaderWrite);
          if (!f->in_tex[0] || !f->in_tex[1] || !f->in_tex[2] || !f->mid_tex || !f->depth || !f->motion) { fi_off("cannot create the interpolation textures"); return nil; }
-@@ -202,7 +215,12 @@ static NvPresentFI *fi_get(CAMetalLayer *layer, NSUInteger cw, NSUInteger ch) {
+@@ -202,7 +226,12 @@ static NvPresentFI *fi_get(CAMetalLayer *layer, NSUInteger cw, NSUInteger ch) {
              [[c renderCommandEncoderWithDescriptor:rp] endEncoding]; [c commit]; [c waitUntilCompleted];
          }
          NSError *te = nil;
@@ -2040,7 +2096,7 @@ index b8a27bf1..b8222954 100644
          for (int i = 0; i < 3; i++) { f->alloc[i] = [g_dev newCommandAllocator]; f->cb[i] = [g_dev newCommandBuffer]; f->slot_free[i] = dispatch_semaphore_create(1); if (!f->alloc[i] || !f->cb[i]) { fi_off("cannot create the command buffers"); return nil; } }
          f->q = dispatch_queue_create("dm.nvn.present-fi", dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_USER_INTERACTIVE, 0)); f->last_seq = UINT64_MAX;
          if (!fi_copy_setup(f)) { fi_off("cannot create the copy pipeline"); return nil; }
-@@ -257,7 +275,7 @@ API_AVAILABLE(macos(26.0), ios(26.0))
+@@ -257,7 +286,7 @@ API_AVAILABLE(macos(26.0), ios(26.0))
  static int fi_commit(NvPresentFI *f, int s, id<CAMetalDrawable> dr, int (^enc)(id cb), void (^after)(int ok)) {
      dispatch_semaphore_wait(f->slot_free[s], DISPATCH_TIME_FOREVER);
      pthread_mutex_lock(&g_fi_enc_mu);
@@ -2049,7 +2105,7 @@ index b8a27bf1..b8222954 100644
      if (dr) [g_q4 waitForDrawable:dr];
      id cb = f->cb[s]; m4_begin_on(cb, f->alloc[s]);
      int ok = enc(cb);
-@@ -317,7 +335,11 @@ static void fi_job(NvPresentFI *f, CAMetalLayer *layer, id<MTLTexture> src, fi_c
+@@ -317,7 +346,11 @@ static void fi_job(NvPresentFI *f, CAMetalLayer *layer, id<MTLTexture> src, fi_c
      //   两侧黑边隔一帧一有，看着闪）：有补丁画幅就按它，没有照旧按输入图比例
      double pa = s2a_cpatch_present_aspect();
      if (have_mid) { id<CAMetalDrawable> dm = [layer nextDrawable]; NSUInteger vh = (NSUInteger)f->h, vw = pa > 0 ? (NSUInteger)llround(f->h * pa) : (NSUInteger)f->w;
@@ -4209,14 +4265,14 @@ index 00000000..1e047394
 +}
 diff --git a/graphics/nvn/tests/t_hdr_gpu_l1.c b/graphics/nvn/tests/t_hdr_gpu_l1.c
 new file mode 100644
-index 00000000..cc39518d
+index 00000000..2f3c2a62
 --- /dev/null
 +++ b/graphics/nvn/tests/t_hdr_gpu_l1.c
 @@ -0,0 +1,223 @@
 +/* hdr_hist_l1（MSL）与 CPU 参考实现的逐行对账。
 + *
-+ * 为什么需要：hdr_hist_l1 是**只在设备上跑**的 kernel（当前从未被调度，只在 blit 失败时
-+ * 由调用方回退——见 nvn_hdr_hist.inc），没有任何本机编译器能验它。CPU 侧有
++ * 为什么需要：hdr_hist_l1 是**只在设备上跑**的 kernel（当前不 dispatch——它算出的 f->out 没有读者；
++ * 曾经每 8 帧白算一次，已删。见 nvn_hdr_hist.inc 里那段注释），没有任何本机编译器能验它。CPU 侧有
 + * s2a_hdr_hist_avg / s2a_hdr_sdr_white / s2a_hdr_scene_weight 三个参考实现，注释里都写着
 + * 「口径必须与 MSL 一致」，但那是**声称**。这里把 MSL 逐行翻成 C，用同一份直方图跑，
 + * 把「声称一致」变成可断言的数字。
