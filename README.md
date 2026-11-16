@@ -1,4 +1,4 @@
-# s2arm-hdr-automap — 逐场景自动 SDR→HDR（补丁交付，非上游副本）
+# IosAutoHDR — 逐场景自动 SDR→HDR（给 S2Arm 的补丁交付，非上游副本）
 
 **用途（Purpose）.** 这是一份**补丁交付仓库**：给社区项目
 [S2Arm](https://github.com/jhaizhou-ops/S2Arm)（iOS 上的 NS 游戏壳）在**出图这一层**加一层
@@ -36,9 +36,9 @@ git clone --filter=blob:none --no-checkout https://github.com/jhaizhou-ops/S2Arm
 cd /tmp/up && git sparse-checkout set graphics runtime tools compat \
   && git fetch --depth 1 origin 0db515053e07 && git checkout -q FETCH_HEAD
 # 2) 打本仓库的补丁（本仓库里没有 src/nvn_mtl.m 之类的上游整文件，patch 是增量的唯一来源）
-git apply --check /path/to/s2arm-hdr-automap/patch/hdr-auto-l1.patch && git apply /path/to/s2arm-hdr-automap/patch/hdr-auto-l1.patch
+git apply --check /path/to/IosAutoHDR/patch/hdr-auto-l1.patch && git apply /path/to/IosAutoHDR/patch/hdr-auto-l1.patch
 # 3) 跑闸门（30 套 885 项 + MSL 结构守卫 42 项 + 落点自检 49 项）
-cp -r /path/to/s2arm-hdr-automap/{src,tools,scripts,docs} . && ./run_all.sh /tmp/up
+cp -r /path/to/IosAutoHDR/{src,tools,scripts,docs} . && ./run_all.sh /tmp/up
 ```
 
 结论只对 `0db515053e07` 这一个上游提交成立；上游前进需要重新跑 `./scripts/verify_upstream.sh <新 sha>`。
