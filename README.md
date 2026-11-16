@@ -37,7 +37,7 @@ SpecialK / BT.2087 / BT.2408-8 / Apple EDR / Microsoft scRGB，每条都写「�
 ## 怎么提 PR
 
 ```sh
-./scripts/verify_upstream.sh     # 在上游当前头上从零验：打补丁 + 30 套 + MSL/常数 + 落点自检
+./scripts/verify_upstream.sh     # 在上游当前头上从零验：打补丁 + 31 套 + MSL/常数 + 落点自检
 ./build/hdr_ref --synth hud --frames 8 --stat-line   # 打与设备日志同格式的一行（比对用）
 ./scripts/check_device_log.py --log <logcat> --expect t2   # 真机三格矩阵的判据（--selftest 自测）
 ./scripts/report_review.py           # docs/REVIEW.md：按这个顺序读（--check 挡漂移）
@@ -115,7 +115,7 @@ git apply -v /path/to/hdr-auto/patch/hdr-auto-l1.patch
 
 ```bash
 ./verify.sh /path/to/s2arm     # 打补丁 → 编三套单测 → 跑
-./run_all.sh /path/to/s2arm    # 全部闸门：30 套 885 项 + 落点 + MSL 静态 + 10 份报告对账 + ASan/UBSan
+./run_all.sh /path/to/s2arm    # 全部闸门：31 套 904 项 + 落点 + MSL 静态 + 10 份报告对账 + ASan/UBSan
 ./scripts/sanitize.sh          # 只跑内存/UB 闸门（ASan+UBSan，halt_on_error=1，约 15 s）
 ./scripts/check_callsites.py    # 调用点实参个数（上游改签名时 patch 只报定义，调用点全靠这条）
 ```
@@ -150,7 +150,7 @@ vim src/nvn_hdr.h              # src/ 是唯一真相源
 
 | 项 | 状态 |
 |---|---|
-| 参数层（纯 C） | ✅ **885** 条断言（30 套）全绿，可在 Linux/CI 复跑；含四场景 nit 量化（`t_hdr_quality`） |
+| 参数层（纯 C） | ✅ **904** 条断言（31 套）全绿，可在 Linux/CI 复跑；含四场景 nit 量化（`t_hdr_quality`） |
 | 补丁可打性 | ✅ 干净 `75eb430240da` 树 `git apply` rc=0 |
 | MSL 语法 | ✅ CI `hdr-check` 用 `xcrun -sdk iphoneos metal -std=metal3.0 -c` 真编译（第一次就抓出 MSL 无 `double`，已改 float） |
 | 嵌入规则 | ✅ 本机 `embed_msl.py` 产出 7,756 B 头文件 |

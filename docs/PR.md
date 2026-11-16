@@ -7,7 +7,7 @@
 > `s2a_cpatch_present_aspect()` 自适应画幅等，共 256 行），重放后反向摘除逐字节还原为上游原文。
 >
 > 合入目标应是默认分支：已实测它能**干净地打到 `main`（`0db515053e07`）**，并在那棵树上跑通
-> 30 套单测 885 项 + 落点自检 49 项 + MSL/常数核对。上游仍在自己前进（同日实测通过的还有
+> 31 套单测 904 项 + 落点自检 49 项 + MSL/常数核对。上游仍在自己前进（同日实测通过的还有
 > `6d01b7897c0d`、`8874b92d071f`、`2237da8ca323`、`3f549467b00d`、`e77fca7b949b`、`b9bd76a202ab`、
 > `1c31fdc0`、`ddfef415`、`2b5aca92`）。上游代码里 HDR/EDR 意图标记
 > 为 0，本补丁是纯增量——`./scripts/check_upstream.sh` 每次都复核这两件事。
@@ -112,7 +112,7 @@ MSL kernel、ObjC `.inc` 这些只在设备上执行的代码，编译不进本�
 
 合并后必须核对的：`present_blit` / `present_blit_m4` 的**所有调用点**都带上了第 6 个实参（冲突列表不会报调用点，但不改就编译不过）。
 
-验证：`check_landing.py` 49/49（按函数范围断言，不按行号）、`run_all.sh /tmp/v08` rc=0（30 套 885 项 + ASan/UBSan + 10 份报告对账），补丁 41 文件 / 6673 行 / `sha256 f2e996e9771bda94…`。
+验证：`check_landing.py` 49/49（按函数范围断言，不按行号）、`run_all.sh /tmp/v08` rc=0（31 套 904 项 + ASan/UBSan + 10 份报告对账），补丁 41 文件 / 6673 行 / `sha256 f2e996e9771bda94…`。
 
 ### 历史：`dcd05e5` → `0db51505`（机械重放，9 个 hunk 全带 offset、反向 `cmp` 逐字节相同）
 
@@ -296,7 +296,7 @@ S2A_HDR_FMT=0`，8 位 + 声明 EDR）与上游截图对比来验——这也是
 ## 怎么提交
 
 ```sh
-./scripts/verify_upstream.sh  # 一条命令：取上游当前头 → 打补丁 → 30 套 + MSL/常数 + 落点自检
+./scripts/verify_upstream.sh  # 一条命令：取上游当前头 → 打补丁 → 31 套 + MSL/常数 + 落点自检
 ./scripts/check_upstream.sh   # 上游默认分支/tag 各在哪、能不能干净打上、是否纯增量
 ./scripts/publish.sh          # dry-run 只打印命令
 ./scripts/publish.sh --yes    # fork → 分支 hdr-auto/l1b → push → gh pr create（正文即本文件）

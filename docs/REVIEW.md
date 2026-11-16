@@ -1,6 +1,6 @@
 # Review 地图
 
-补丁 41 个文件（其中 11 个新增 src 文件、30 套单测），新增/改动的 src 合计 **21365 行**（含 `nvn_mtl.m` 的 17,459 行存量）。本表由 `scripts/report_review.py` 按仓库当前状态生成，`--check` 会挡漂移。
+补丁 42 个文件（其中 11 个新增 src 文件、31 套单测），新增/改动的 src 合计 **21365 行**（含 `nvn_mtl.m` 的 17,459 行存量）。本表由 `scripts/report_review.py` 按仓库当前状态生成，`--check` 会挡漂移。
 
 ## 先读这五个（约 20 分钟）
 
@@ -31,9 +31,9 @@
 | `nvn_hdr_msl_hist.h` | 127 | 直方图 kernel 的 C 转写（分箱 / 分位 / L1 三段），逐行对应 MSL。 | MSL 与 CPU 的分箱、分位、黑像素口径会各自漂移；历史上正是这里抓到 `lit_frac` 设备恒 1.0。 | `t_hdr_bin_mirror`、`t_hdr_knee_mirror` |
 | `hdr_hist.metal` | 148 | 直方图 kernel：`hdr_hist_clear/add`（256 格原子累加，黑像素也记进 0 号格）、`hdr_hist_l1`（仅用于对账日志与 blit 失败 fallback）。 | 设备上没有任何亮度统计，自适应无从谈起。 | `t_hdr_bin_mirror`、`t_hdr_gpu_mirror` |
 | `host_adapt.m` | 850 | 诊断入口：`S2A_HDR_FMT` / `S2A_HDR_OUTPUT` 两个环境变量覆盖像素格式与 EDR 声明，供真机三格矩阵使用。 | 真机只能靠改代码重编才能试一格，三格矩阵要编三个包。 | `t_hdr_pipeline` |
-| `Makefile` | 139 | 把全部单测（当前 30 套）接进上游的 `make test`，与会话里 `verify.sh` 的 glob 保持同一份名单。 | 单测存在但没人跑（`verify.sh` 曾硬编码 13 个套件名，新增的 8 套静默漏跑了很久）。 | （由 `run_all.sh` 步骤覆盖） |
+| `Makefile` | 139 | 把全部单测（当前 31 套）接进上游的 `make test`，与会话里 `verify.sh` 的 glob 保持同一份名单。 | 单测存在但没人跑（`verify.sh` 曾硬编码 13 个套件名，新增的 8 套静默漏跑了很久）。 | （由 `run_all.sh` 步骤覆盖） |
 
-## 单测（30 套）
+## 单测（31 套）
 
 `verify.sh` 用 glob 收集 `src/t_hdr*.c` 并断言套数下限，所以新增一套不会被静默漏跑。每套只做一件事：把某个「只在设备上执行」的实现（MSL kernel、上屏 fragment、回读控制流）逐行翻成 C，与参考实现对账。
 
@@ -52,6 +52,7 @@
 | `t_hdr_framerate.c` | 189 | 按帧率换平滑系数 |
 | `t_hdr_frames.c` | 208 | 图像级用例（夜景/HUD/字幕/淡出） |
 | `t_hdr_fuzz.c` | 198 | 随机直方图不变量（12 条性质）：不预设场景，只要求任何输入下都成立 |
+| `t_hdr_gpu_l1.c` | 223 | （未登记，补 scripts/report_review.py） |
 | `t_hdr_gpu_mirror.c` | 242 | 设备链路整链（分箱→L1→上屏） |
 | `t_hdr_head.c` | 78 | EDR 上界跟随 |
 | `t_hdr_hud.c` | 135 | HUD/字幕簇剔除 |

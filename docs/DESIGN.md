@@ -633,3 +633,27 @@ knee 档的定位是「不动 SDR 观感、只把高光顶出显示器件的能�
 
 上屏是 `src_msl_hdr` 里的 `c.extra.z > 0.5` 分支（`extra.z` 以前空着），
 CPU 侧是 `s2a_hdr_grade_rgb_map(..., map=1, ...)`；`src/t_hdr_map.c` 把两边的逐通道差压到 2.4e-7。
+
+## GPU 侧 L1（`hdr_hist_l1`）与主路径的已知差异
+
+设备上的 knee **不是 GPU 算的**：`hdr_hist_add` 只数格子，1 KB 直方图 `copyFromBuffer` 回 CPU，
+`s2a_hdr_auto_l1b_step_fused_hz` 在 CPU 上算 L1b 再 publish 给渲染线程。`hdr_hist_l1` 这个 kernel
+建了管线（`ps_l1`）但**从未被调度**，只有 blit 失败时调用方才可能回退到它。
+
+它的行为由 `src/t_hdr_gpu_l1.c` 逐行对账（把 MSL 翻成 C，用同一份直方图跑 CPU 参考实现）：
+
+| 项 | MSL（float） | CPU 主路径（double） | 结论 |
+| --- | --- | --- | --- |
+| `avg` | −1.975795 | −1.975795 | 差 5.96e-07 stop（float 累加误差，可忽略） |
+| `white` | 1.310961 | 1.310961 | 同格（同一条「最高一个计数 ≥ 0.5% 的格」判据） |
+| `need` 量化 | `(uint)((float)total*0.005f)` | `(uint64_t)((double)total*0.005)` | 1..200000 逐个比较差 **0** 个 |
+| `scene` | 0.66 stop → 0.311394 | 0.311394 | 逐位一致 |
+
+**唯一的真差异是 HUD**：MSL 的 white 没有簇剔除（主路径用 `s2a_hdr_sdr_white_bulk`）。
+同一份「内容主体 + 2.4% 孤立 HUD 白条」的直方图：MSL 白点被顶格拉到 **13.24**（hi 打满上限 2.0），
+CPU bulk 给 **0.4204**（hi 0.5256）。后果不是「画面变亮」而是**扩张失效**——knee_hi=2.0 意味着
+只有 2.0 以上的亮度才吃增益，8 位 SDR 内容永远够不着。
+
+不修的理由：这条 kernel 从未被调度；剔除要求两遍扫（找 top → 判 gap → 再扫），在单线程
+compute kernel 里做等于把 256 格扫三遍。真要让 GPU 算 knee 时再补，届时 `t_hdr_gpu_l1.c`
+的第 8 条断言会立刻变成红的（它断的是「MSL 白点比 CPU bulk 高 1 stop 以上」这个当前事实）。

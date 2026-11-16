@@ -74,6 +74,6 @@
 ## 复现
 
 ```bash
-./run_all.sh            # 全部闸门（30 套单测 + ref_check + 本报告 + 平台区扫描）
+./run_all.sh            # 全部闸门（31 套单测 + ref_check + 本报告 + 平台区扫描）
 python3 scripts/report.py   # 只重生成这份表
 ```
