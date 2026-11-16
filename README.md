@@ -91,6 +91,14 @@ SpecialK / BT.2087 / BT.2408-8 / Apple EDR / Microsoft scRGB，每条都写「�
 不含上游整文件、不含构建产物、**不含 ` .github/`（因此物理上无法触发任何 runner）**。
 逐条纪律与实名事故复盘见 [docs/GITHUB-COMPLIANCE.md](docs/GITHUB-COMPLIANCE.md)，自检：`./scripts/check_projection.sh`。
 
+维护者把工作树同步到投影时不该手抄（会漏、会多）：
+
+```sh
+./scripts/sync_release.sh /path/to/projection --commit "说明"   # 白名单复制 → 投影自检 → 提交
+```
+
+白名单而不是通配，是踩出来的：`cp -r src/*.inc` 曾把上游整文件 `nvn_present_fi.inc` 拷进公开仓库。
+
 ## 打补丁
 
 目标基线：S2Arm `main` 的 **75eb430240da**（`75eb430240dae472ec834f98b47194d7ff2ff7e5`，2026-11-16；v0.4.0 `dcd05e5` 之后的提交；上一基线 `0db515053e07` 的历史实测仍保留在 docs/PR.md）。
