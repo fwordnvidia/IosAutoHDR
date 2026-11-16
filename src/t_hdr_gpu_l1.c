@@ -1,7 +1,7 @@
 /* hdr_hist_l1（MSL）与 CPU 参考实现的逐行对账。
  *
- * 为什么需要：hdr_hist_l1 是**只在设备上跑**的 kernel（当前从未被调度，只在 blit 失败时
- * 由调用方回退——见 nvn_hdr_hist.inc），没有任何本机编译器能验它。CPU 侧有
+ * 为什么需要：hdr_hist_l1 是**只在设备上跑**的 kernel（当前不 dispatch——它算出的 f->out 没有读者；
+ * 曾经每 8 帧白算一次，已删。见 nvn_hdr_hist.inc 里那段注释），没有任何本机编译器能验它。CPU 侧有
  * s2a_hdr_hist_avg / s2a_hdr_sdr_white / s2a_hdr_scene_weight 三个参考实现，注释里都写着
  * 「口径必须与 MSL 一致」，但那是**声称**。这里把 MSL 逐行翻成 C，用同一份直方图跑，
  * 把「声称一致」变成可断言的数字。

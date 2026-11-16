@@ -638,7 +638,10 @@ CPU 侧是 `s2a_hdr_grade_rgb_map(..., map=1, ...)`；`src/t_hdr_map.c` 把两�
 
 设备上的 knee **不是 GPU 算的**：`hdr_hist_add` 只数格子，1 KB 直方图 `copyFromBuffer` 回 CPU，
 `s2a_hdr_auto_l1b_step_fused_hz` 在 CPU 上算 L1b 再 publish 给渲染线程。`hdr_hist_l1` 这个 kernel
-建了管线（`ps_l1`）但**从未被调度**，只有 blit 失败时调用方才可能回退到它。
+建了管线（`ps_l1`）但**不 dispatch**：它算出来的 `f->out` 没有任何读者。它一度每 `S2A_HDR_HIST_EVERY`
+（8）帧被真跑一次、写进一个没人看的 buffer——等于白算一次单线程 256 格循环，已删掉那段 dispatch
+（`check_landing.py` 现在断言 `setComputePipelineState:f->ps_l1` 不再出现）。管线留着，给
+`src/t_hdr_gpu_l1.c` 当对账参考。
 
 它的行为由 `src/t_hdr_gpu_l1.c` 逐行对账（把 MSL 翻成 C，用同一份直方图跑 CPU 参考实现）：
 

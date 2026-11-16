@@ -28,7 +28,7 @@ for r in sorted(refs):
 # 使用者在本仓库（hdr-auto 子项目 / 公开投影）里会直接敲的入口。
 # 仓库级脚本（mirror_vultr.sh、check_repo_hygiene.sh）住在完整工作树的 scripts/，不进投影，不在本表。
 ENTRY = ['rebase_patch.sh', 'verify_upstream.sh', 'baseline_report.sh', 'make_patch.sh',
-         'sanitize.sh', 'check_projection.sh', 'publish.sh', 'sync_release.sh', 'check_callsites.py',
+         'sanitize.sh', 'check_projection.sh', 'publish.sh', 'sync_release.sh', 'check_callsites.py', 'check_device_coverage.py',
          'check_device_log.py', 'check_msl.py']
 for e in ENTRY:
     if e not in readme:

@@ -109,13 +109,12 @@ static void hdr_hist_tick(id<MTLCommandBuffer> cb, id<MTLTexture> src) {
         [en setBytes:&stride length:sizeof stride atIndex:1];
         [en setBytes:&linearize length:sizeof linearize atIndex:2];
         [en dispatchThreads:MTLSizeMake(src.width, src.height, 1) threadsPerThreadgroup:MTLSizeMake(8, 8, 1)];
-        [en setComputePipelineState:f->ps_l1];
-        [en setBuffer:f->hist offset:0 atIndex:0];
-        [en setBuffer:f->out offset:0 atIndex:1];
-        float pavg = f->prev_avg; uint32_t have_prev = (uint32_t)f->have_prev;
-        [en setBytes:&pavg length:sizeof pavg atIndex:2];
-        [en setBytes:&have_prev length:sizeof have_prev atIndex:3];
-        [en dispatchThreads:MTLSizeMake(1, 1, 1) threadsPerThreadgroup:MTLSizeMake(1, 1, 1)];
+        // hdr_hist_l1 不 dispatch。它算出来的 f->out 没有任何读者——knee 全部在 CPU 侧按下面
+        // 回读的真直方图算（s2a_hdr_auto_l1b_step_fused_hz），GPU 只负责数格子。
+        // 曾经它每 S2A_HDR_HIST_EVERY（8）帧被 dispatch 一次、写进一个没人看的 buffer：白算。
+        // 管线 ps_l1 仍然建着，因为 src/t_hdr_gpu_l1.c 拿它当参考实现对账；将来真要在 GPU 上
+        // 算 knee，把这段 dispatch 连同读取 f->out 一起加回来——那时对账里「GPU 白点比 CPU bulk
+        // 高 1 stop 以上」那条断言会先红，提醒 HUD 簇剔除也得补上。
         [en endEncoding];
         // 把 1 KB 直方图拷回 CPU 可见缓冲：判定全部在 CPU 侧按「真直方图」算，
         // GPU 只负责数格子。blit 在 30 帧里发生一次，开销可忽略。

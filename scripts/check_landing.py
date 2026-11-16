@@ -152,6 +152,11 @@ knee_used = any("ps_knee" in ln or ("hdr_hist_knee" in ln and "kernel" not in ln
                 for ln in inc_lines)
 check(not knee_used, "hdr_hist_knee 仍然未被调度（若接上去，需同步加 GPU/CPU L0 对账）")
 
+# hdr_hist_l1 同理：管线建着（ps_l1），但**不 dispatch**——它算出的 f->out 没有读者，
+# knee 全部在 CPU 侧按回读的真直方图算。曾经每 8 帧白跑一次单线程 256 格循环。
+l1_dispatched = any("setComputePipelineState:f->ps_l1" in ln for ln in inc_lines)
+check(not l1_dispatched, "hdr_hist_l1 不 dispatch（结果无人读；接回去要先补 HUD 簇剔除，见 t_hdr_gpu_l1）")
+
 # 降级之后必须能回来：present_now 里要有 rearm 试探，并且把三样状态一起恢复
 # （像素格式、EDR 开关、颜色空间）。少恢复一样就会出现「画面回来了但颜色发灰」。
 for needle, what in (
