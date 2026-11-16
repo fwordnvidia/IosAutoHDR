@@ -25,6 +25,7 @@ map_path() {
         hdr_hist.metal)  echo "graphics/nvn/shaders/$1" ;;
         t_*.c)           echo "graphics/nvn/tests/$1" ;;
         host_adapt.m)    echo "graphics/nvn/$1" ;;
+        play_reflection.m) echo "ios/$1" ;;
         Makefile)        echo "graphics/nvn/$1" ;;
         *)               echo "graphics/nvn/gfx/nvn/$1" ;;
     esac
@@ -37,7 +38,7 @@ check_coverage() {
         case "$rel" in
             graphics/nvn/shaders/*) base=$(basename "$rel") ;;
             graphics/nvn/tests/*)   base=$(basename "$rel") ;;
-            graphics/nvn/host_adapt.m|graphics/nvn/Makefile) base=$(basename "$rel") ;;
+            graphics/nvn/host_adapt.m|graphics/nvn/Makefile|ios/play_reflection.m) base=$(basename "$rel") ;;
             graphics/nvn/gfx/nvn/*) base=$(basename "$rel") ;;
             *) echo "⚠ 补丁含未映射路径：$rel"; miss=1; continue ;;
         esac
@@ -95,7 +96,7 @@ for f in src/*; do
     cp "$f" "$dst"
 done
 
-( cd "$TREE" && git add -A graphics && git diff --cached > "$HERE/$PATCH" )
+( cd "$TREE" && git add -A graphics ios && git diff --cached > "$HERE/$PATCH" )
 
 echo "✓ 补丁已重建：$(grep -c '^diff --git' "$PATCH") 文件，$(grep -c '^+' "$PATCH") 行增，sha256 $(sha256sum "$PATCH" | cut -d' ' -f1)"
 

@@ -1,6 +1,6 @@
 # Review 地图
 
-补丁 42 个文件（其中 11 个新增 src 文件、31 套单测），新增/改动的 src 合计 **21375 行**（含 `nvn_mtl.m` 的 17,459 行存量）。本表由 `scripts/report_review.py` 按仓库当前状态生成，`--check` 会挡漂移。
+补丁 43 个文件（其中 12 个新增 src 文件、31 套单测），新增/改动的 src 合计 **21518 行**（含 `nvn_mtl.m` 的 17,459 行存量）。本表由 `scripts/report_review.py` 按仓库当前状态生成，`--check` 会挡漂移。
 
 ## 先读这五个（约 20 分钟）
 
@@ -21,6 +21,7 @@
 
 | 文件 | 行数 | 职责 | 不加会怎样 | 守它的套件 |
 |---|---|---|---|---|
+| `play_reflection.m` | 143 | 镜像/反射层跟随游戏层的像素格式与色彩空间（上游 11-13 已有），本补丁补上 EDR 开关那一行：16F + extended linear 但 `wantsExtendedDynamicRangeContent` 为 NO 时系统按 SDR 合成，镜像里 >1 的高光被钳回 1.0。这是补丁唯一改到 `graphics/` 以外的文件。 | 补丁要覆盖 ios/ 就得连带改 `make_patch.sh` 的 map_path/check_coverage 与 `git add` 范围；删掉这一行不影响主屏，只是镜像退回 SDR。 | `check_callsites（SPOT 里数这一行）` |
 | `nvn_hdr.h` | 541 | 参数层与全部微积分：`s2a_hdr_to_linear`、`s2a_hdr_itm_*`、`s2a_hdr_grade_rgb`、`s2a_hdr_clip_head`、`s2a_hdr_status_line`、`s2a_hdr_fmt_guard`、原子 knee 打包。 | 整个补丁没有可复用的纯函数层，任何一处上屏代码都得各自实现一遍 ITM，GPU/CPU 两侧数值分叉无法避免。 | `t_hdr`、`t_hdr_stat`、`t_hdr_fmtguard`、`t_hdr_publish` |
 | `nvn_hdr_auto.h` | 90 | 直方图与分箱定义（`S2A_HDR_HIST_BINS` 256 格、`s2a_hdr_hist_bin`、`S2A_HDR_HIST_EVERY 8`、`s2a_hdr_lit_frac`）。 | 分箱口径（log2 格 / 上沿 / 每 8 帧回读）散落在各处，CPU 与 MSL 各写一份后必然不同。 | `t_hdr_auto`、`t_hdr_bin_mirror`、`t_hdr_gpu_mirror` |
 | `nvn_hdr_auto_l1.h` | 549 | 自适应判定本体：L1 白点、L1b 拐点（`knee_lo`=纸白、`knee_hi`=截断点）、HUD 剔除、切镜融合、淡入淡出冻结、按帧率换平滑系数。 | 拐点只能写死常量（上游 `nvn_present_fi.inc` 的 0.55/1.0 就是这样），HDR、SDR、暗场、字幕全用同一组数——这就是补丁要解决的原始问题。 | `t_hdr_auto_l1`、`t_hdr_hud`、`t_hdr_fade`、`t_hdr_framerate`、`t_hdr_frames` |

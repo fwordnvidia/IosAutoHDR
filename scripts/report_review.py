@@ -23,6 +23,14 @@ DOC = os.path.join(HERE, "docs", "REVIEW.md")
 # 文件 → (一句话职责, 不加会怎样, 守护它的测试套件)
 # 顺序即建议阅读顺序：算法核心 → 设备接线 → 宿主/格式 → 对账 → 工具。
 INFO = {
+    "play_reflection.m": (
+        "镜像/反射层跟随游戏层的像素格式与色彩空间（上游 11-13 已有），本补丁补上 EDR 开关那一行："
+        "16F + extended linear 但 `wantsExtendedDynamicRangeContent` 为 NO 时系统按 SDR 合成，"
+        "镜像里 >1 的高光被钳回 1.0。这是补丁唯一改到 `graphics/` 以外的文件。",
+        "补丁要覆盖 ios/ 就得连带改 `make_patch.sh` 的 map_path/check_coverage 与 `git add` 范围；"
+        "删掉这一行不影响主屏，只是镜像退回 SDR。",
+        ["check_callsites（SPOT 里数这一行）"],
+    ),
     "nvn_hdr.h": (
         "参数层与全部微积分：`s2a_hdr_to_linear`、`s2a_hdr_itm_*`、`s2a_hdr_grade_rgb`、"
         "`s2a_hdr_clip_head`、`s2a_hdr_status_line`、`s2a_hdr_fmt_guard`、原子 knee 打包。",

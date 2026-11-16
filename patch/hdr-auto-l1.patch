@@ -7344,3 +7344,19 @@ index 00000000..3fc5eb5c
 +           fails ? "✗" : "✓", checks, fails ? "有失败" : "全过", fails);
 +    return fails != 0;
 +}
+diff --git a/ios/play_reflection.m b/ios/play_reflection.m
+index 5430270d..b451175c 100644
+--- a/ios/play_reflection.m
++++ b/ios/play_reflection.m
+@@ -107,6 +107,11 @@ id<CAMetalDrawable> s2a_ios_reflection_drawable(CAMetalLayer *game) {
+     if (m.device!=game.device) m.device=game.device;   // The renderer sets these on the game layer after it is attached
+     if (m.pixelFormat!=game.pixelFormat) m.pixelFormat=game.pixelFormat;
+     if (m.colorspace!=game.colorspace) m.colorspace=game.colorspace;
++    // S2Arm HDR：像素格式与色彩空间跟着游戏层走了，EDR 开关却没跟——16F drawable + extended linear
++    //   colorspace 但 wantsExtendedDynamicRangeContent 仍是 NO，系统按 SDR 合成这块镜像，
++    //   镜像画面里 >1 的高光被钳回 1.0（主屏正常）。这一行少不得：HDR 与「对称视图/反射」同开时
++    //   只有它能让两个层说同一种亮度语言。（像素格式那一行是上游 11-13 加的，见上方注释）
++    if (m.wantsExtendedDynamicRangeContent!=game.wantsExtendedDynamicRangeContent) m.wantsExtendedDynamicRangeContent=game.wantsExtendedDynamicRangeContent;
+     id<CAMetalDrawable> d=m.device ? [m nextDrawable] : nil;
+     void (^done)(void)=^{ pthread_mutex_lock(&g_mu); if (g_inflight>0) g_inflight--; pthread_mutex_unlock(&g_mu); };
+     if (!d) { done(); return nil; }

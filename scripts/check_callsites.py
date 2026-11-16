@@ -181,6 +181,9 @@ SPOT = [
     ('src/nvn_mtl.m', 'present_blit(cb, src, s->input, crop, flip, 0)', 1),
     ('src/nvn_mtl.m', 'present_blit_m4(cb, src, dst, crop, g_present_uv[slot], g_present_args, flip, 1)', 1),
     ('src/nvn_mtl.m', 'present_blit_m4(cb, src, s->input, crop, s->cropUV, s->cropTable, flip, 0)', 1),
+    # ios/play_reflection.m：镜像/反射层跟着游戏层的格式与色彩空间走（上游 11-13），EDR 开关不跟 ⇒
+    #   HDR 下这块层按 SDR 合成、镜像里 >1 的高光被钳。这一行是我们补的，必须还在。
+    ('src/play_reflection.m', 'if (m.wantsExtendedDynamicRangeContent!=game.wantsExtendedDynamicRangeContent)', 1),
 ]
 for rel, needle, want in SPOT:
     f = ROOT / rel

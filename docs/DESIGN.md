@@ -678,3 +678,19 @@ compute kernel 里做等于把 256 格扫三遍。真要让 GPU 算 knee 时再�
 
 **推论**：整窗截图（`grab_present`）截的是**游戏画面**而不是扩张后的 HDR 画面——这是刻意的，
 autoplayer 拿它和游戏自己的画面比对；HDR 的扩张只发生在画布那一步。
+
+## 镜像 / 反射层（`ios/play_reflection.m`，补丁唯一触及 ios/ 的一行）
+
+iOS 的「对称视图 / 反射」用第二块 `CAMetalLayer` 出同一帧。上游 11-13 让它跟随游戏层：
+
+```objc
+if (m.pixelFormat!=game.pixelFormat) m.pixelFormat=game.pixelFormat;
+if (m.colorspace!=game.colorspace) m.colorspace=game.colorspace;
+```
+
+HDR 把游戏层换成 `RGBA16Float` + `kCGColorSpaceExtendedLinearSRGB`，这两行会让镜像层也变成
+16F 线性——但 `wantsExtendedDynamicRangeContent` 没跟。少了它，系统按 **SDR** 合成那块层，
+镜像画面里 >1 的高光被钳回 1.0（主屏正常）。所以补丁在第三行补上同一句，让两个层对亮度
+达成一致。断言：`check_callsites.py` 的 `SPOT` 里有一条数它。
+
+这是补丁**唯一**改到 `graphics/` 以外的地方，理由写在 `docs/PR.md`「触及范围」一节。

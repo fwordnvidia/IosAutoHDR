@@ -310,3 +310,15 @@ S2A_HDR_FMT=0`，8 位 + 声明 EDR）与上游截图对比来验——这也是
 4. `host_adapt.m`（layer 格式 + EDR）；
 5. `nvn_present_fi.inc`（与补帧共存，可选）；
 6. `tests/*.c`（每条断言都对应 docs 里的一张表）。
+
+### 触及范围（为什么有一行在 `graphics/` 之外）
+
+补丁 43 个文件里 42 个在 `graphics/`，另有 `ios/play_reflection.m` **一行**：
+
+```objc
+if (m.wantsExtendedDynamicRangeContent!=game.wantsExtendedDynamicRangeContent) m.wantsExtendedDynamicRangeContent=game.wantsExtendedDynamicRangeContent;
+```
+
+上游让镜像/反射层跟随游戏层的像素格式与色彩空间，没有跟 EDR 开关。HDR 开时那块层是
+16F + extended linear 但按 SDR 合成，镜像里的高光被钳。理由与后果写在 `docs/DESIGN.md`
+「镜像 / 反射层」。若维护者不愿改 ios/，把这一行删掉即可：主屏不受影响，只是镜像退回 SDR。
