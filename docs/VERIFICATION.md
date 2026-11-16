@@ -7,7 +7,7 @@
 
 ```bash
 ./run_all.sh                      # 不需要 S2Arm 树：自检 + 敏感度 + 曲线图
-./run_all.sh /tmp/v04q            # 额外：把补丁打进干净 v0.4.0 树跑三十套单测（885 项）
+./run_all.sh /tmp/v06             # 额外：把补丁打进干净 0db515053e07 树跑三十套单测（885 项）
 ```
 
 `run_all.sh` 返回 0 才算通过。步骤：`0/5` 量化报告 → `1/5` 参考 CLI → `2/5` HUD 平台区 →
@@ -26,7 +26,7 @@
 
 | 结论 | 命令 | 期望 |
 |---|---|---|
-| 补丁能在干净 v0.4.0 上无冲突应用 | `git apply --check patch/hdr-auto-l1.patch`（在干净树） | 0 退出；23 个文件 |
+| 补丁能在干净 `0db515053e07` 上无冲突应用 | `git apply --check patch/hdr-auto-l1.patch`（在干净树） | 0 退出；41 个文件 |
 | 补丁文件指纹 | `sha256sum patch/hdr-auto-l1.patch` | `8ecb6d9b…`（23 文件，+3650 行） |
 | MSL 能按 Makefile 规则嵌入 | `python3 graphics/metal/tools/embed_msl.py graphics/nvn/shaders/hdr_hist.metal k_hdr_hist out.h` | 7,948 B |
 

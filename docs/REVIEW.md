@@ -1,6 +1,6 @@
 # Review 地图
 
-补丁 41 个文件（其中 11 个新增 src 文件、30 套单测），新增/改动的 src 合计 **20571 行**（含 `nvn_mtl.m` 的 17,459 行存量）。本表由 `scripts/report_review.py` 按仓库当前状态生成，`--check` 会挡漂移。
+补丁 41 个文件（其中 11 个新增 src 文件、30 套单测），新增/改动的 src 合计 **20790 行**（含 `nvn_mtl.m` 的 17,459 行存量）。本表由 `scripts/report_review.py` 按仓库当前状态生成，`--check` 会挡漂移。
 
 ## 先读这五个（约 20 分钟）
 
@@ -12,7 +12,7 @@
    不加会怎样：拐点只能写死常量（上游 `nvn_present_fi.inc` 的 0.55/1.0 就是这样），HDR、SDR、暗场、字幕全用同一组数——这就是补丁要解决的原始问题。
 3. **`nvn_hdr_hist.inc`**（214 行）—— 设备侧接线：建直方图纹理/缓冲、每 8 帧 `copyFromBuffer` 回 CPU、算 L1b、原子发布 knee、打 `HDR stat` 诊断行。
    不加会怎样：算法存在但没人调用：画面上不会有任何变化。**这个文件是「补丁是否真的生效」的唯一证据源**，`check_landing.py` 有 8 项只盯它。
-4. **`nvn_mtl.m`**（17466 行）—— 宿主：16F 画布与 EDR 三件套的启用/降级/回头路、`present_blit` 两条路径取 knee、每帧 `hdr_head_tick()` 跟随屏幕上界、diagnostic 覆盖。
+4. **`nvn_mtl.m`**（17668 行）—— 宿主：16F 画布与 EDR 三件套的启用/降级/回头路、`present_blit` 两条路径取 knee、每帧 `hdr_head_tick()` 跟随屏幕上界、diagnostic 覆盖。
    不加会怎样：没有 HDR 画布、没有上屏扩张，且降级路径（外接 SDR 屏、老设备）会永久黑屏或永久发灰。
 5. **`nvn_hdr_auto.h`**（90 行）—— 直方图与分箱定义（`S2A_HDR_HIST_BINS` 256 格、`s2a_hdr_hist_bin`、`S2A_HDR_HIST_EVERY 8`、`s2a_hdr_lit_frac`）。
    不加会怎样：分箱口径（log2 格 / 上沿 / 每 8 帧回读）散落在各处，CPU 与 MSL 各写一份后必然不同。
@@ -25,8 +25,8 @@
 | `nvn_hdr_auto.h` | 90 | 直方图与分箱定义（`S2A_HDR_HIST_BINS` 256 格、`s2a_hdr_hist_bin`、`S2A_HDR_HIST_EVERY 8`、`s2a_hdr_lit_frac`）。 | 分箱口径（log2 格 / 上沿 / 每 8 帧回读）散落在各处，CPU 与 MSL 各写一份后必然不同。 | `t_hdr_auto`、`t_hdr_bin_mirror`、`t_hdr_gpu_mirror` |
 | `nvn_hdr_auto_l1.h` | 549 | 自适应判定本体：L1 白点、L1b 拐点（`knee_lo`=纸白、`knee_hi`=截断点）、HUD 剔除、切镜融合、淡入淡出冻结、按帧率换平滑系数。 | 拐点只能写死常量（上游 `nvn_present_fi.inc` 的 0.55/1.0 就是这样），HDR、SDR、暗场、字幕全用同一组数——这就是补丁要解决的原始问题。 | `t_hdr_auto_l1`、`t_hdr_hud`、`t_hdr_fade`、`t_hdr_framerate`、`t_hdr_frames` |
 | `nvn_hdr_hist.inc` | 214 | 设备侧接线：建直方图纹理/缓冲、每 8 帧 `copyFromBuffer` 回 CPU、算 L1b、原子发布 knee、打 `HDR stat` 诊断行。 | 算法存在但没人调用：画面上不会有任何变化。**这个文件是「补丁是否真的生效」的唯一证据源**，`check_landing.py` 有 8 项只盯它。 | `t_hdr_tick`、`t_hdr_wiring`、`t_hdr_pipeline` |
-| `nvn_mtl.m` | 17466 | 宿主：16F 画布与 EDR 三件套的启用/降级/回头路、`present_blit` 两条路径取 knee、每帧 `hdr_head_tick()` 跟随屏幕上界、diagnostic 覆盖。 | 没有 HDR 画布、没有上屏扩张，且降级路径（外接 SDR 屏、老设备）会永久黑屏或永久发灰。 | `t_hdr_pipeline`、`t_hdr_head`、`t_hdr_fmtguard`、`t_hdr_stability` |
-| `nvn_present_fi.inc` | 346 | 上游补帧（MetalFX）的上屏环节，补丁只做一件事：把两处写死的 `BGRA8Unorm` 参数化，让 16F 画布也能过补帧。 | HDR 与补帧二选一：开补帧就得回 8 位，HDR 被关掉。 | `t_hdr_gpu_mirror` |
+| `nvn_mtl.m` | 17668 | 宿主：16F 画布与 EDR 三件套的启用/降级/回头路、`present_blit` 两条路径取 knee、每帧 `hdr_head_tick()` 跟随屏幕上界、diagnostic 覆盖。 | 没有 HDR 画布、没有上屏扩张，且降级路径（外接 SDR 屏、老设备）会永久黑屏或永久发灰。 | `t_hdr_pipeline`、`t_hdr_head`、`t_hdr_fmtguard`、`t_hdr_stability` |
+| `nvn_present_fi.inc` | 363 | 上游补帧（MetalFX）的上屏环节，补丁只做一件事：把两处写死的 `BGRA8Unorm` 参数化，让 16F 画布也能过补帧。 | HDR 与补帧二选一：开补帧就得回 8 位，HDR 被关掉。 | `t_hdr_gpu_mirror` |
 | `nvn_hdr_msl.h` | 107 | 上屏 fragment 的 C 转写（与 `hdr_hist.metal` 里的 shader 逐行对应），供对账用。 | 上屏 shader 没有任何本机可执行的形式，成了「改了也没人知道」的黑盒。 | `t_hdr_shader_mirror` |
 | `nvn_hdr_msl_hist.h` | 127 | 直方图 kernel 的 C 转写（分箱 / 分位 / L1 三段），逐行对应 MSL。 | MSL 与 CPU 的分箱、分位、黑像素口径会各自漂移；历史上正是这里抓到 `lit_frac` 设备恒 1.0。 | `t_hdr_bin_mirror`、`t_hdr_knee_mirror` |
 | `hdr_hist.metal` | 148 | 直方图 kernel：`hdr_hist_clear/add`（256 格原子累加，黑像素也记进 0 号格）、`hdr_hist_l1`（仅用于对账日志与 blit 失败 fallback）。 | 设备上没有任何亮度统计，自适应无从谈起。 | `t_hdr_bin_mirror`、`t_hdr_gpu_mirror` |

@@ -109,7 +109,8 @@ SpecialK / BT.2087 / BT.2408-8 / Apple EDR / Microsoft scRGB，每条都写「�
 
 ## 打补丁
 
-目标基线：S2Arm **v0.4.0**（`dcd05e5fa84c8c5c68b6ba66e3b1c6de016636ae`）。
+目标基线：S2Arm `main` 的 **0db515053e07**（`0db515053e0763d597234faade2d4527982498b5`，2026-11-16）。
+基线写在 [`patch/BASELINE`](patch/BASELINE) 里，是唯一真相源；上游 tag 仍停在 v0.4.0 而 `main` 已前进数百个提交，所以**结论只对这一个提交成立**。
 0.4.0 上游**没有**任何 HDR 代码（`nvn_hdr*` 全缺、全树 `S2A_HDR` 零命中），所以这个补丁是纯新增。
 
 ```bash

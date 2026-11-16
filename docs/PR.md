@@ -1,12 +1,15 @@
 # 给上游的 PR 说明（可直接粘贴）
 
 > 目标仓库：`jhaizhou-ops/S2Arm`（Apache-2.0）。本目录不是上游源码，而是**一个补丁包**：
-> `patch/hdr-auto-l1.patch` 制作于 `v0.4.0`（`dcd05e5fa84c8c5c68b6ba66e3b1c6de016636ae`）。
+> `patch/hdr-auto-l1.patch` 基于 `main` 的 `0db515053e0763d597234faade2d4527982498b5`（2026-11-16）制作。
+> 更早的版本基于 `v0.4.0`（`dcd05e5fa84c8c5c68b6ba66e3b1c6de016636ae`），基线迁移时把 8 处补帧改动
+> 重放到上游新版 `nvn_present_fi.inc` 与 `nvn_mtl.m`（上游在这两个文件里新增了 `fi_may_take_drawable()`、
+> `s2a_cpatch_present_aspect()` 自适应画幅等，共 256 行），重放后反向摘除逐字节还原为上游原文。
 >
-> 合入目标应是默认分支：已实测它能**干净地打到 `main`（`0db515053e07`，2026-11-16，
-> 比 v0.4.0 前进 353+ 个提交）**，并在那棵树上跑通三十套单测与 MSL/常数核对。
-> 上游仍在自己前进（同日 `2b5aca92`、`ddfef415`、`1c31fdc0`、`b9bd76a2` 都实测过：
-> `./scripts/verify_upstream.sh` 在 `0db515053e07` 上跑完 30 套 885 项 + 落点自检 49 项（2026-11-16 复验通过；同一补丁在此前 `6d01b7897c0d`、`8874b92d071f`、`2237da8ca323`、`3f549467b00d`、`e77fca7b949b`、`b9bd76a202ab` 上也全过），全过）。上游代码里 HDR/EDR 意图标记
+> 合入目标应是默认分支：已实测它能**干净地打到 `main`（`0db515053e07`）**，并在那棵树上跑通
+> 30 套单测 885 项 + 落点自检 49 项 + MSL/常数核对。上游仍在自己前进（同日实测通过的还有
+> `6d01b7897c0d`、`8874b92d071f`、`2237da8ca323`、`3f549467b00d`、`e77fca7b949b`、`b9bd76a202ab`、
+> `1c31fdc0`、`ddfef415`、`2b5aca92`）。上游代码里 HDR/EDR 意图标记
 > 为 0，本补丁是纯增量——`./scripts/check_upstream.sh` 每次都复核这两件事。
 
 ## 标题
@@ -96,6 +99,58 @@ MSL kernel、ObjC `.inc` 这些只在设备上执行的代码，编译不进本�
   跨黑场不跳、出暗区 1 帧到位；
 - 每帧开销：控制器一次调用 **0.57 µs**（30/60/120 Hz 相同），占 120 Hz 帧预算 0.007%；
 - 运行期 headroom：每帧读一次 EDR 上界（1% 死区），用户拖亮度/换屏后不再按旧 head 扩张。
+
+## 基线迁移（上游前进后怎么跟）
+
+补丁是**对某一个提交**验证的，`patch/BASELINE` 就是那个提交，且它是唯一真相源：
+
+```sh
+cat patch/BASELINE                       # 一行 sha + 日期
+./scripts/verify_upstream.sh             # 默认验基线，可复现
+./scripts/verify_upstream.sh --head      # 追上游当前头；打不上会打印诊断而不是普通失败
+./scripts/baseline_report.sh             # 基线离上游 head 多远、哪些文件要重放、各多少行
+```
+
+为什么默认验基线而不是 head：上游一天能走几百个提交（2026-11-16 一天内 `2b5aca92`→`ddfef415`→
+`1c31fdc0`→`b9bd76a2`→`6d01b789`→`e77fca7b`→`3f549467`→`2237da8c`→`8874b92d`→`0db51505`→`1a6eda79`）。
+head 只说明「此刻」，而基线是「任何人 clone 这个 sha 都能复现」的承诺。追 head 是需要人工重放的
+工程动作，不该混进日常验证。
+
+实测的迁移成本（从 v0.4.0 `dcd05e5` → `0db51505`）：
+
+| 上游改了我们也要改的文件 | 我们重放几处 | 怎么验 |
+| --- | --- | --- |
+| `nvn_mtl.m` | 9 个 hunk（HDR 上屏、管线缓存、headroom tick） | `patch --dry-run` 全 succeed；反向摘除后 `cmp` 逐字节等于上游原文 |
+| `nvn_present_fi.inc` | 8 处（`cfmt` 参数化、16F 试探、uv 16 float、中间帧走 ITM） | 同上 |
+| `host_adapt.m` | 2 处（16F 画布 + EDR 声明） | 同上 |
+| `Makefile` | 1 处（`GENH` 生成规则） | 上游未动，无需重放 |
+
+重放步骤（三个文件都一样）：
+
+```sh
+# 1) 取上游新版原文
+git -C <新基线树> show HEAD:graphics/nvn/gfx/nvn/nvn_mtl.m > /tmp/up_mtl.m
+# 2) 从旧补丁里抽出该文件的 diff，打到上游新版上（patch 会自动找偏移）
+python3 - <<'EOF'
+import re; t=open('patch/hdr-auto-l1.patch').read()
+for s in re.split(r'(?m)^(?=diff --git )', t):
+    if 'nvn_mtl.m' in s[:120]: open('/tmp/our_mtl.diff','w').write(s)
+EOF
+mkdir -p /tmp/replay/graphics/nvn/gfx/nvn && cp /tmp/up_mtl.m /tmp/replay/graphics/nvn/gfx/nvn/
+cd /tmp/replay && patch -p1 -i /tmp/our_mtl.diff      # 看 Hunk #n succeeded at … (offset N)
+# 3) 反向守卫：把我们改动反向摘掉，必须逐字节等于上游原文
+mkdir -p /tmp/rev/graphics/nvn/gfx/nvn && cp graphics/nvn/gfx/nvn/nvn_mtl.m /tmp/rev/graphics/nvn/gfx/nvn/
+cd /tmp/rev && patch -R -p1 -i /tmp/our_mtl.diff && cmp graphics/nvn/gfx/nvn/nvn_mtl.m /tmp/up_mtl.m
+# 4) 写回 src/（src 是唯一真相源），改 patch/BASELINE，重建补丁，跑闸门
+cp /tmp/replay/graphics/nvn/gfx/nvn/nvn_mtl.m <repo>/src/nvn_mtl.m
+./scripts/make_patch.sh <新基线树> --force
+python3 scripts/report_review.py && python3 scripts/report_options.py && python3 scripts/report.py
+python3 scripts/check_counts.py && ./scripts/check_baseline.py && ./run_all.sh <新基线树>
+```
+
+第 3 步的反向守卫是这一轮唯一真正省时间的东西：`patch --dry-run` 说「succeeded with offset」
+只证明上下文能对上，证明不了「我们的改动一处没丢」。反向摘除后 `cmp` 逐字节等于上游原文，
+才说明重放是无损的（这一轮 `nvn_mtl.m` 的 9 个 hunk 偏移 10～202 行，反向 `cmp` 通过）。
 
 ## 两种放置方式，默认是保守那个
 

@@ -1686,10 +1686,10 @@ index 00000000..a001187a
 +
 +#endif
 diff --git a/graphics/nvn/gfx/nvn/nvn_mtl.m b/graphics/nvn/gfx/nvn/nvn_mtl.m
-index d16ca3e5..ed14f065 100644
+index fcaef4c5..a08d9d52 100644
 --- a/graphics/nvn/gfx/nvn/nvn_mtl.m
 +++ b/graphics/nvn/gfx/nvn/nvn_mtl.m
-@@ -703,7 +703,7 @@ void mtl_init(void) {
+@@ -713,7 +713,7 @@ void mtl_init(void) {
          g_present_args = [g_dev newArgumentTableWithDescriptor:pad error:&ate];
          if (!g_present_args) MDIE("failed to create the present argument table: %s", ate.localizedDescription.UTF8String);
          for (int i = 0; i < 3; i++) {
@@ -1698,7 +1698,7 @@ index d16ca3e5..ed14f065 100644
              if (!g_present_uv[i]) MDIE("failed to create present UV buffer[%d]", i);
              res_add(g_present_uv[i]);
          }
-@@ -16282,17 +16282,139 @@ id<CAMetalDrawable> s2a_ios_reflection_drawable(CAMetalLayer *game) __attribute_
+@@ -16484,17 +16484,139 @@ id<CAMetalDrawable> s2a_ios_reflection_drawable(CAMetalLayer *game) __attribute_
  #endif
  void mtl_present_test_stall(uint64_t ns) { g_present_stall_ns = ns; }
  #include "nvn_present_aa.inc"
@@ -1839,7 +1839,7 @@ index d16ca3e5..ed14f065 100644
          if (!lib) MDIE("present shader compile failed %s", e.localizedDescription.UTF8String);
          MTLRenderPipelineDescriptor *pd = [MTLRenderPipelineDescriptor new];
          pd.vertexFunction = [lib newFunctionWithName:@"vs"]; pd.fragmentFunction = [lib newFunctionWithName:@"fs"];
-@@ -16323,6 +16445,7 @@ static id<MTLTexture> present_raw_src(id<MTLTexture> src) {
+@@ -16525,6 +16647,7 @@ static id<MTLTexture> present_raw_src(id<MTLTexture> src) {
  __attribute__((weak)) double s2a_cpatch_present_aspect(void) { return 0; }   // native runtime/src/cpatch.c: current aspect while an adaptive community widescreen patch is on; graphics unit tests without the host have none
  #include "nvn_present_fit.h"   // pf_crop_fit (present_now) / pf_viewport (both blits); plain C, tested by graphics/nvn/tests/t_present_fit.c
  static int present_blit(id<MTLCommandBuffer> cb, id<MTLTexture> src, id<MTLTexture> dst, const int crop[4], BOOL flip) {
@@ -1847,7 +1847,7 @@ index d16ca3e5..ed14f065 100644
      NSUInteger cx = 0, cy = 0, cw = src.width, ch = src.height;
      if (crop && (crop[2] || crop[3])) {
          if (crop[0] < 0 || crop[1] < 0 || crop[2] <= 0 || crop[3] <= 0 ||
-@@ -16351,8 +16474,12 @@ static int present_blit(id<MTLCommandBuffer> cb, id<MTLTexture> src, id<MTLTextu
+@@ -16553,8 +16676,12 @@ static int present_blit(id<MTLCommandBuffer> cb, id<MTLTexture> src, id<MTLTextu
      id<MTLRenderCommandEncoder> en = [cb renderCommandEncoderWithDescriptor:rp];
      [en setViewport:vp];
      [en setRenderPipelineState:g_blit_pso]; [en setFragmentTexture:present_raw_src(src) atIndex:0]; [en setFragmentSamplerState:g_blit_samp atIndex:0];
@@ -1862,7 +1862,7 @@ index d16ca3e5..ed14f065 100644
      if (flip) { uv[1] += uv[3]; uv[3] = -uv[3]; }   // lower-left origin: the window image is stored bottom-up
      [en setFragmentBytes:uv length:sizeof uv atIndex:0];
      [en drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
-@@ -16360,6 +16487,7 @@ static int present_blit(id<MTLCommandBuffer> cb, id<MTLTexture> src, id<MTLTextu
+@@ -16562,6 +16689,7 @@ static int present_blit(id<MTLCommandBuffer> cb, id<MTLTexture> src, id<MTLTextu
      return 1;
  }
  static int present_blit_m4(id<MTL4CommandBuffer> cb, id<MTLTexture> src, id<MTLTexture> dst, const int crop[4], id<MTLBuffer> uvBuffer, id table, BOOL flip) {
@@ -1870,7 +1870,7 @@ index d16ca3e5..ed14f065 100644
      NSUInteger cx = 0, cy = 0, cw = src.width, ch = src.height;
      if (crop && (crop[2] || crop[3])) {
          if (crop[0] < 0 || crop[1] < 0 || crop[2] <= 0 || crop[3] <= 0 ||
-@@ -16386,6 +16514,13 @@ static int present_blit_m4(id<MTL4CommandBuffer> cb, id<MTLTexture> src, id<MTLT
+@@ -16588,6 +16716,13 @@ static int present_blit_m4(id<MTL4CommandBuffer> cb, id<MTLTexture> src, id<MTLT
      float *uv = uvBuffer.contents;
      uv[0] = (float)cx / src.width; uv[1] = (float)cy / src.height; uv[2] = (float)cw / src.width; uv[3] = (float)ch / src.height;
      uv[4] = (cx + 0.5f) / src.width; uv[5] = (cy + 0.5f) / src.height; uv[6] = (cx + cw - 0.5f) / src.width; uv[7] = (cy + ch - 0.5f) / src.height;
@@ -1884,7 +1884,7 @@ index d16ca3e5..ed14f065 100644
      if (flip) { uv[1] += uv[3]; uv[3] = -uv[3]; }   // normalized AA input is already upright
      tab_buf(table, uvBuffer, 0, 0);
      [en setViewport:vp]; [en setRenderPipelineState:g_blit_pso];
-@@ -16411,11 +16546,17 @@ static const int *rs_aa_crop(id<MTLTexture> src, id<MTLTexture> dst, const int c
+@@ -16613,11 +16748,17 @@ static const int *rs_aa_crop(id<MTLTexture> src, id<MTLTexture> dst, const int c
  }
  // mirror (iOS split-view reflection, may be nil): the final picture drawn a second time into the small reflection drawable,
  //   by the same blit with the same inputs as the one into dst (ios/play_reflection.m s2a_ios_reflection_drawable)
@@ -1904,7 +1904,7 @@ index d16ca3e5..ed14f065 100644
      id<MTLTexture> out;
      if (g_present_aa) {
          int ac[4]; NvPresentAA *s = present_aa_prepare(slot, src, rs_aa_crop(src, dst, crop, fx, ac));   // rs_aa_crop
-@@ -16442,9 +16583,11 @@ API_AVAILABLE(macos(26.0), ios(26.0))
+@@ -16644,9 +16785,11 @@ API_AVAILABLE(macos(26.0), ios(26.0))
  static int present_encode_m4(id<MTL4CommandBuffer> cb, id<MTLTexture> src, id<MTLTexture> dst, id<MTLTexture> mirror, const int crop[4], int slot) {
      present_options();
      BOOL flip = atomic_load_explicit(&g_origin_ll, memory_order_relaxed) != 0;
@@ -1918,7 +1918,7 @@ index d16ca3e5..ed14f065 100644
      id<MTLTexture> out;
      if (g_present_aa) {
          int ac[4]; NvPresentAA *s = present_aa_prepare(slot, src, rs_aa_crop(src, dst, crop, fx, ac));   // rs_aa_crop
-@@ -16609,7 +16752,47 @@ static int present_now(const tex_t *t, double period, uint64_t frame, uint64_t t
+@@ -16811,7 +16954,47 @@ static int present_now(const tex_t *t, double period, uint64_t frame, uint64_t t
      uint64_t dt0 = now_ns();
      id<CAMetalDrawable> dr = supplied ? supplied : [layer nextDrawable];
      if (!supplied) g_drawable_ns += now_ns() - dt0;
@@ -1968,7 +1968,7 @@ index d16ca3e5..ed14f065 100644
  #if TARGET_OS_IPHONE
      id<CAMetalDrawable> mdr = s2a_ios_reflection_drawable ? s2a_ios_reflection_drawable(layer) : nil;
 diff --git a/graphics/nvn/gfx/nvn/nvn_present_fi.inc b/graphics/nvn/gfx/nvn/nvn_present_fi.inc
-index 61c849d5..0bac95a8 100644
+index 2487474e..8ad33803 100644
 --- a/graphics/nvn/gfx/nvn/nvn_present_fi.inc
 +++ b/graphics/nvn/gfx/nvn/nvn_present_fi.inc
 @@ -14,6 +14,7 @@ API_AVAILABLE(macos(26.0), ios(26.0))
@@ -1979,7 +1979,7 @@ index 61c849d5..0bac95a8 100644
      id<MTLTexture> in_tex[3], mid_tex, depth, motion;   // 输入图三张轮换（这一帧 / 上一帧 / 出图线程正在写的下一帧，读写不撞同一张）、补出的帧、常数深度、零运动
      id<MTLFXFrameInterpolator> mfx; id<MTLCommandQueue> mq;   // MetalFX 帧插值在自己的 Metal 命令队列上编码
      id<MTLRenderPipelineState> psoCopy;
-@@ -138,7 +139,7 @@ static int fi_copy_setup(NvPresentFI *f) {
+@@ -147,7 +148,7 @@ static int fi_copy_setup(NvPresentFI *f) {
      NSError *e = nil; id<MTLLibrary> lib = [g_dev newLibraryWithSource:@(msl) options:nil error:&e];
      if (!lib) { MLOG("【红】 frame interpolation shader: %s", e.localizedDescription.UTF8String); return 0; }
      MTLRenderPipelineDescriptor *pd = [MTLRenderPipelineDescriptor new];
@@ -1988,7 +1988,7 @@ index 61c849d5..0bac95a8 100644
      f->psoCopy = [g_dev newRenderPipelineStateWithDescriptor:pd error:&e];
      if (!f->psoCopy) { MLOG("【红】 frame interpolation pipeline: %s", e.localizedDescription.UTF8String); return 0; }
      return 1;
-@@ -151,7 +152,7 @@ static NvPresentFI *fi_get(CAMetalLayer *layer, NSUInteger cw, NSUInteger ch) {
+@@ -160,7 +161,7 @@ static NvPresentFI *fi_get(CAMetalLayer *layer, NSUInteger cw, NSUInteger ch) {
      static int maxh = -1; if (maxh < 0) { const char *e = getenv("DM_PRESENT_FI_MAXH"); maxh = e && atoi(e) > 0 ? atoi(e) : 1080; }
      double s = ch > (NSUInteger)maxh ? (double)maxh / ch : 1;
      int iw = (int)(cw * s) & ~1, ih = (int)(ch * s) & ~1;
@@ -1997,7 +1997,7 @@ index 61c849d5..0bac95a8 100644
      if (f && (f->w != iw || f->h != ih)) {   // 画面比例变了（11-13 iPhone 实机：开局竖屏、几秒后转横屏）：插值器的输入尺寸是建时定死的，等在途的活做完、整个重建
          dispatch_sync(f->q, ^{});
          MLOG("present frame interpolation: the game picture changed to %lux%lu (input %dx%d → %dx%d), rebuilding", (unsigned long)cw, (unsigned long)ch, f->w, f->h, iw, ih);
-@@ -167,11 +168,23 @@ static NvPresentFI *fi_get(CAMetalLayer *layer, NSUInteger cw, NSUInteger ch) {
+@@ -176,11 +177,23 @@ static NvPresentFI *fi_get(CAMetalLayer *layer, NSUInteger cw, NSUInteger ch) {
          static int mvq = -1; if (mvq < 0) { const char *e = getenv("DM_PRESENT_FI_MVQ"); mvq = !(e && !strcmp(e, "0")); if (mvq) MLOG("present frame interpolation: motion / depth at quarter size (DM_PRESENT_FI_MVQ=0 for full size)"); }
          int mw = mvq && fi_mv_mode() ? iw / 4 : iw, mh = mvq && fi_mv_mode() ? ih / 4 : ih;
          d.outputWidth = (NSUInteger)iw; d.outputHeight = (NSUInteger)ih; d.inputWidth = (NSUInteger)mw; d.inputHeight = (NSUInteger)mh;
@@ -2025,13 +2025,13 @@ index 61c849d5..0bac95a8 100644
          f->depth = fi_tex(MTLPixelFormatR32Float, mw, mh, f->mfx.depthTextureUsage | MTLTextureUsageRenderTarget);
          f->motion = fi_tex(MTLPixelFormatRG16Float, mw, mh, f->mfx.motionTextureUsage | MTLTextureUsageRenderTarget | MTLTextureUsageShaderWrite);
          if (!f->in_tex[0] || !f->in_tex[1] || !f->in_tex[2] || !f->mid_tex || !f->depth || !f->motion) { fi_off("cannot create the interpolation textures"); return nil; }
-@@ -182,7 +195,12 @@ static NvPresentFI *fi_get(CAMetalLayer *layer, NSUInteger cw, NSUInteger ch) {
+@@ -191,7 +204,12 @@ static NvPresentFI *fi_get(CAMetalLayer *layer, NSUInteger cw, NSUInteger ch) {
              [[c renderCommandEncoderWithDescriptor:rp] endEncoding]; [c commit]; [c waitUntilCompleted];
          }
          NSError *te = nil;
 -        for (int i = 0; i < 4; i++) { f->uv[i] = [g_dev newBufferWithLength:8 * sizeof(float) options:MTLResourceStorageModeShared]; res_add(f->uv[i]); f->tab[i] = tab_new(1, 1, 1, &te); if (!f->uv[i] || !f->tab[i]) { fi_off("cannot create the blit tables"); return nil; } }
 +        // 16 float = 8 裁剪 + 4 knee + 4 extra，与 present_blit_m4 的 HdrCrop 完全一致。
-+        //   曾经是 12（8+4）：present_blit_m4 只在 `uvBuffer.length >= 16*sizeof(float)` 时才写 knee/extra，
++        //   曾经是 8：present_blit_m4 只在 `uvBuffer.length >= 16*sizeof(float)` 时才写 knee/extra，
 +        //   于是补帧这条路上 knee 恒 0 → 16F 上屏的扩张 shader 走退化分支（knee_hi <= knee_lo）
 +        //   返回 a*knee.z（=0）⇒ **HDR + 补帧同时开时画布是黑的**。缓冲区归零掩盖了这个长度不匹配，
 +        //   日志里也看不出来（渲染成功、只是全黑）。
@@ -2039,7 +2039,7 @@ index 61c849d5..0bac95a8 100644
          for (int i = 0; i < 3; i++) { f->alloc[i] = [g_dev newCommandAllocator]; f->cb[i] = [g_dev newCommandBuffer]; f->slot_free[i] = dispatch_semaphore_create(1); if (!f->alloc[i] || !f->cb[i]) { fi_off("cannot create the command buffers"); return nil; } }
          f->q = dispatch_queue_create("dm.nvn.present-fi", dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_USER_INTERACTIVE, 0)); f->last_seq = UINT64_MAX;
          if (!fi_copy_setup(f)) { fi_off("cannot create the copy pipeline"); return nil; }
-@@ -237,7 +255,7 @@ API_AVAILABLE(macos(26.0), ios(26.0))
+@@ -246,7 +264,7 @@ API_AVAILABLE(macos(26.0), ios(26.0))
  static int fi_commit(NvPresentFI *f, int s, id<CAMetalDrawable> dr, int (^enc)(id cb), void (^after)(int ok)) {
      dispatch_semaphore_wait(f->slot_free[s], DISPATCH_TIME_FOREVER);
      pthread_mutex_lock(&g_fi_enc_mu);
@@ -2048,10 +2048,10 @@ index 61c849d5..0bac95a8 100644
      if (dr) [g_q4 waitForDrawable:dr];
      id cb = f->cb[s]; m4_begin_on(cb, f->alloc[s]);
      int ok = enc(cb);
-@@ -287,7 +305,13 @@ static void fi_job(NvPresentFI *f, CAMetalLayer *layer, id<MTLTexture> src, fi_c
-     // 先上补出的帧，再隔半个游戏周期上真帧（游戏原图直接画进画布）
-     double half = period > 0 ? period / 2 : 1.0 / 60; int mid_shown = 0;
-     if (have_mid) { id<CAMetalDrawable> dm = [layer nextDrawable]; NSUInteger vw = (NSUInteger)f->w, vh = (NSUInteger)f->h;
+@@ -302,7 +320,13 @@ static void fi_job(NvPresentFI *f, CAMetalLayer *layer, id<MTLTexture> src, fi_c
+     //   两侧黑边隔一帧一有，看着闪）：有补丁画幅就按它，没有照旧按输入图比例
+     double pa = s2a_cpatch_present_aspect();
+     if (have_mid) { id<CAMetalDrawable> dm = [layer nextDrawable]; NSUInteger vh = (NSUInteger)f->h, vw = pa > 0 ? (NSUInteger)llround(f->h * pa) : (NSUInteger)f->w;
 -        if (dm && fi_commit(f, 1, dm, ^int(id cb) { return dup ? present_blit_m4(cb, src, dm.texture, crop, f->uv[2], f->tab[2], flip) : fi_pass(cb, f->psoCopy, f->tab[2], f->uv[2], mid, nil, dm.texture, NULL, NO, vw, vh); }, nil)) { fi_count_on(dm, &g_fi_on_mid); [dm present]; mid_shown = 1; f->shown_mid++; } }
 +        if (dm && fi_commit(f, 1, dm, ^int(id cb) { return dup ? present_blit_m4(cb, src, dm.texture, crop, f->uv[2], f->tab[2], flip)
 +                                                         : (f->cfmt == MTLPixelFormatRGBA16Float
