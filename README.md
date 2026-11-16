@@ -1,66 +1,12 @@
-# IosAutoHDR — 逐场景自动 SDR→HDR（给 S2Arm 的补丁交付，非上游副本）
+# hdr-auto — 逐场景自动 SDR→HDR（S2Arm 出图层）
 
-**用途（Purpose）.** 这是一份**补丁交付仓库**：给社区项目
-[S2Arm](https://github.com/jhaizhou-ops/S2Arm)（iOS 上的 NS 游戏壳）在**出图这一层**加一层
-自动 SDR→HDR——把 SDR 画面按帧统计后映射到显示器的 EDR 余量里，类似 NVIDIA RTX HDR 的
-「SDR 转 HDR」，但用闭式统计而不是神经网络（每帧 0.57 µs）。**个人研究用途**，不含商业行为。
-
-**这个仓库放什么、不放什么.** 由个人（`fwordnvidia`）维护，只放在 S2Arm 之上叠加的
-**补丁与自写代码**：
-
-| 放 | 不放 |
-| --- | --- |
-| `patch/hdr-auto-l1.patch`（唯一交付主体，37 文件 +5997 行增量） | 上游整文件副本（`nvn_mtl.m` 17,459 行、`host_adapt.m`、`nvn_present_fi.inc` 都不在仓库里） |
-| 自写头/内联/单测（`src/nvn_hdr*.h`、`src/nvn_hdr_hist.inc`、`src/t_hdr*.c`） | 构建产物、`build/`、二进制、release 包 |
-| 脚本生成的报告（`docs/*.md`，全部可用脚本复现）与对照图 | 上游的 `.github/`、CI 配置、issue 模板 |
-| 上游 `LICENSE`（Apache-2.0 全文）与 `NOTICE` | 任何需要凭据的自动化 |
-
-**明确声明：本仓库不启用、也不包含任何 GitHub Actions / CI 配置**（没有 `.github/`）。
-所有验证都在本地 Linux 上跑（纯 C，不需要 Xcode、不需要真机）。这是刻意的：
-本项目的构建不需要托管 runner，也不应该消耗公共 CI 资源。
-
-**与另一个仓库的区别.** 个人工作树 `s2arm-ios-build`（`ci/github-actions` 分支）是**完整可编译的
-本地树**（含上游文件、完整构建脚本），不对外；本仓库只承载**可独立审阅的
-补丁与文档**，是它的公开投影。两者内容不重叠，避免同一份上游代码被重复上传。
-
-**上游与许可.** 上游 S2Arm 为 Apache-2.0；本仓库保留其 `LICENSE` 与 `NOTICE`，并在
-`patch/` 的每个 hunk 里保持原有版权头。补丁只做增量，不改上游的许可声明。
-
----
-
-## 合规（可验证，不是承诺）
-
-本仓库**不含任何 CI 配置**——没有 `.github/`，全树 `.yml`/`.yaml` 数量为 0，所以物理上不可能起托管 runner。
-一条命令核验全部主张：
-
-```sh
-./scripts/check_projection.sh      # 7 组检查：无 workflow / 无上游整文件 / 无产物 / 无大文件 / 无凭据 / 许可 / 基线一致
-```
-
-由来与往后纪律见 [docs/GITHUB-COMPLIANCE.md](docs/GITHUB-COMPLIANCE.md)。
-
-## 怎么复验（本地，Linux 即可）
-
-```sh
-# 1) 取上游（只要 graphics/runtime/tools/compat 四个目录，约几十 MB）
-git clone --filter=blob:none --no-checkout https://github.com/jhaizhou-ops/S2Arm.git /tmp/up
-cd /tmp/up && git sparse-checkout set graphics runtime tools compat \
-  && git fetch --depth 1 origin 0db515053e07 && git checkout -q FETCH_HEAD
-# 2) 打本仓库的补丁（本仓库里没有 src/nvn_mtl.m 之类的上游整文件，patch 是增量的唯一来源）
-git apply --check /path/to/IosAutoHDR/patch/hdr-auto-l1.patch && git apply /path/to/IosAutoHDR/patch/hdr-auto-l1.patch
-# 3) 跑闸门（30 套 885 项 + MSL 结构守卫 42 项 + 落点自检 49 项）
-cp -r /path/to/IosAutoHDR/{src,tools,scripts,docs} . && ./run_all.sh /tmp/up
-```
-
-结论只对 `0db515053e07` 这一个上游提交成立；上游前进需要重新跑 `./scripts/verify_upstream.sh <新 sha>`。
-
-## 技术说明（原交付说明）
+给 S2Arm 这类 iOS/NS 壳在**出图这一层**做自动 SDR→HDR：不改游戏、不读游戏内存，只看最终画面。
 
 > **English summary.** Per-frame automatic SDR→HDR for the *present* stage of an iOS/NS game shell — no game
 > patching, no memory reading, only the final frame. A GPU pass builds a 256-bin log2 luminance histogram of the
 > presented frame; the diffuse white (highest bin holding ≥0.5% of pixels) and a black-clip + scene-aware
 > smoothing stage derive two knee points, and the present shader expands everything above the knee toward the panel's
-> EDR headroom while keeping BT.2087 hue and paper-white luminance fixed. Thirty C test suites (885 assertions),
+> EDR headroom while keeping BT.2087 hue and paper-white luminance fixed. Nine C test suites (458 assertions),
 > a reference CLI plus 20 self-checks run on plain Linux — no Xcode, no device needed. Patch applies cleanly on
 > upstream `0db515053e07` (2026-11-16). Everything is documented in Chinese; code identifiers and comments are bilingual
 > enough to follow the math.
@@ -74,7 +20,7 @@ cp -r /path/to/IosAutoHDR/{src,tools,scripts,docs} . && ./run_all.sh /tmp/up
 - `src/nvn_hdr_hist.inc` / `src/hdr_hist.metal` — GPU 侧直方图与 kernel
 - `src/t_hdr_hud.c` — HUD/孤立高光剔除：1% 的 HUD 白字不再掐死整帧的扩张（白点 0.7424 → 0.2381）
 - `src/t_hdr_color.c` — 色域（BT.2087 sRGB→P3）与保亮度饱和度：灰恒等、色相守住、缺省逐位不变
-- `src/t_hdr.c` / `src/t_hdr_auto.c` / `src/t_hdr_auto_l1.c` / `src/t_hdr_pipeline.c` / `src/t_hdr_color.c` / `src/t_hdr_quality.c` / `src/t_hdr_stability.c` / `src/t_hdr_banding.c` / `src/t_hdr_robust.c` / `src/t_hdr_hud.c` / `src/t_hdr_framerate.c` / `src/t_hdr_gpu_mirror.c` — （连同其余各套共 **885 条断言 / 30 套**），纯 C，Linux 可跑
+- `src/t_hdr.c` / `src/t_hdr_auto.c` / `src/t_hdr_auto_l1.c` / `src/t_hdr_pipeline.c` / `src/t_hdr_color.c` / `src/t_hdr_quality.c` / `src/t_hdr_stability.c` / `src/t_hdr_banding.c` / `src/t_hdr_robust.c` / `src/t_hdr_hud.c` / `src/t_hdr_framerate.c` / `src/t_hdr_gpu_mirror.c` — **564 条断言（另有使用者命令 15 项、报告一致性 3 项）**，纯 C，Linux 可跑
   （最后一个是端到端：合成帧 → 直方图 → L1 → ITM，断言中性不偏色、色相不变、峰值不越 head、中间调不动）
 
 `docs/VERIFICATION.md` 是**验证矩阵**：每条结论配一条命令和期望输出，并列出明确没验的四项（MSL 编译、ObjC 编译、链接、运行期）。
@@ -120,13 +66,13 @@ SpecialK / BT.2087 / BT.2408-8 / Apple EDR / Microsoft scRGB，每条都写「�
 
 ## 打补丁
 
-目标基线：S2Arm `main` 的 **0db515053e07**（`0db515053e0763d597234faade2d4527982498b5`，2026-11-16）。
-基线写在 [`patch/BASELINE`](patch/BASELINE) 里，是唯一真相源；上游 tag 仍停在 v0.4.0 而 `main` 已前进数百个提交，所以**结论只对这一个提交成立**。
+目标基线：S2Arm `main` 的 **0db515053e07**（`0db515053e0763d597234faade2d4527982498b5`，2026-11-16；v0.4.0 `dcd05e5` 之后的提交）。
+注意上游 tag 仍停在 v0.4.0 而 `main` 已前进数百个提交，本补丁对**这一个提交**验证通过，上游再动需重跑 `./scripts/verify_upstream.sh <新 sha>`。
 0.4.0 上游**没有**任何 HDR 代码（`nvn_hdr*` 全缺、全树 `S2A_HDR` 零命中），所以这个补丁是纯新增。
 
 ```bash
 git clone https://github.com/jhaizhou-ops/S2Arm.git s2arm && cd s2arm
-git checkout dcd05e5fa84c8c5c68b6ba66e3b1c6de016636ae
+git checkout 0db515053e0763d597234faade2d4527982498b5
 git apply -v /path/to/hdr-auto/patch/hdr-auto-l1.patch
 ```
 
@@ -136,7 +82,7 @@ git apply -v /path/to/hdr-auto/patch/hdr-auto-l1.patch
 ./verify.sh /path/to/s2arm     # 打补丁 → 编三套单测 → 跑
 ```
 
-本机实测（干净 v0.4.0 树，`cc -O2 -Wall -Wextra`）：
+本机实测（干净 0db515053e07 树，`cc -O2 -Wall -Wextra`）：
 
 ```
 ✓ t_hdr：HDR 出屏线性化 + 扩张曲线 134 项 → 全过
@@ -152,14 +98,14 @@ git apply -v /path/to/hdr-auto/patch/hdr-auto-l1.patch
 
 补丁本体：`patch/hdr-auto-l1.patch`，**23 文件 +3650 行**（−19），`sha256 8ecb6d9b6d987694abfd7eb623e27553abe2f01ac18b0ccaa1732a169eee81fd`。
 
-补丁同时修了一个会直接编译失败的缺口：`nvn_hdr_hist.inc` 要 `#include "nvn_hdr_hist_msl.h"`，而 v0.4.0 的 `graphics/nvn/Makefile` 里**没有**生成它的规则（`GENH` 只列 `gal_tess_msl.h`）。补丁补上 `GENH` 条目与 `embed_msl.py` 规则，否则这条链路一被 include 就断。
+补丁同时修了一个会直接编译失败的缺口：`nvn_hdr_hist.inc` 要 `#include "nvn_hdr_hist_msl.h"`，而该基线的 `graphics/nvn/Makefile` 里**没有**生成它的规则（`GENH` 只列 `gal_tess_msl.h`）。补丁补上 `GENH` 条目与 `embed_msl.py` 规则，否则这条链路一被 include 就断。
 
 ## 状态（诚实标注）
 
 | 项 | 状态 |
 |---|---|
 | 参数层（纯 C） | ✅ **885** 条断言（30 套）全绿，可在 Linux/CI 复跑；含四场景 nit 量化（`t_hdr_quality`） |
-| 补丁可打性 | ✅ 干净 v0.4.0 树 `git apply` rc=0 |
+| 补丁可打性 | ✅ 干净 `0db515053e07` 树 `git apply` rc=0 |
 | MSL 语法 | ✅ CI `hdr-check` 用 `xcrun -sdk iphoneos metal -std=metal3.0 -c` 真编译（第一次就抓出 MSL 无 `double`，已改 float） |
 | 嵌入规则 | ✅ 本机 `embed_msl.py` 产出 7,756 B 头文件 |
 | GPU 侧接线 | ✅ `present_encode_slot` 每 8 帧（`S2A_HDR_HIST_EVERY`）跑 `clear→add→hdr_hist_l1` + blit 1 KB 直方图回 CPU；判定全在 CPU（真直方图），`float4` 只留作对账日志 |
@@ -312,7 +258,7 @@ python3 scripts/report.py     # 改完算法后重新生成
 ## 许可证
 
 本目录是 S2Arm（Apache-2.0）的**补丁与独立参考实现**，不含上游源码：`patch/hdr-auto-l1.patch`
-打在上游 v0.4.0（`dcd05e5`）的干净树上。见 [LICENSE](LICENSE) 与 [NOTICE](NOTICE)。
+打在上游 `0db515053e07` 的干净树上。见 [LICENSE](LICENSE) 与 [NOTICE](NOTICE)。
 
 `.github/workflows/verify.yml` 是包内 CI：clone 上游 → 打补丁 → 跑全部闸门 + MSL/ObjC 真编译，
 推上 GitHub 或 fork 后可手动触发。

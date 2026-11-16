@@ -18,8 +18,11 @@ git clone -q --filter=blob:none --no-checkout "$UP" "$dir/t"
 cd "$dir/t"
 git sparse-checkout init --cone >/dev/null 2>&1 || true
 git sparse-checkout set graphics runtime tools compat >/dev/null 2>&1 || true
-git fetch -q --depth 1 origin "$BASE"; git fetch -q --depth 1 origin "$HEAD_SHA"
+# 不加深浅限制：--depth 1 会让 git rev-list --count 只看到 1 个提交，把「距离」说小（踩过）。
+# --filter=blob:none 已经足够便宜：只要提交图，不看文件内容。
+git fetch -q --filter=blob:none origin "$BASE"; git fetch -q --filter=blob:none origin "$HEAD_SHA"
 N=$(git rev-list --count "$BASE".."$HEAD_SHA" 2>/dev/null || echo "?")
+[ "$N" = 1 ] && git cat-file -e "$BASE^" 2>/dev/null && echo "· 注意：$BASE 的上游父提交存在，说明历史完整"
 echo "距离: $N 个提交"
 echo
 echo "我们改过、上游也会改的文件（这些要重放）："
