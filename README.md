@@ -28,6 +28,17 @@
 
 ---
 
+## 合规（可验证，不是承诺）
+
+本仓库**不含任何 CI 配置**——没有 `.github/`，全树 `.yml`/`.yaml` 数量为 0，所以物理上不可能起托管 runner。
+一条命令核验全部主张：
+
+```sh
+./scripts/check_projection.sh      # 7 组检查：无 workflow / 无上游整文件 / 无产物 / 无大文件 / 无凭据 / 许可 / 基线一致
+```
+
+由来与往后纪律见 [docs/GITHUB-COMPLIANCE.md](docs/GITHUB-COMPLIANCE.md)。
+
 ## 怎么复验（本地，Linux 即可）
 
 ```sh
