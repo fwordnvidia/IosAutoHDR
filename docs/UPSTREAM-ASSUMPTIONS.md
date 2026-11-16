@@ -19,6 +19,19 @@
 | A9 | MetalFX 建失败要抓异常并回退到 8 位 | ✓ | 不抓 ⇒ 抛到调用方崩掉；抓了不置 nil ⇒ 后面拿着半成品用 |
 | A10 | FI 的缓存键含层格式（格式变了必须重建） | ✓ | 降级/升级 16F 后仍用旧 FI 对象 ⇒ 输入格式与 cfmt 不一致，补帧写出错 |
 | A11 | cfmt 由实际建成的 MetalFX 决定，不是猜的 | ✓ | 按 want 记 cfmt 而 MetalFX 实际退回 8 位 ⇒ 纹理格式与描述符不一致 |
+| A12 | 整窗截图读的是游戏画面 src（8 位），不是 16F 画布 | ✓ | 改成读 dr.texture（16F）⇒ 8 位 PNG 里是线性值，截图整体偏暗，autoplayer 的基线也变了 |
+| A13 | DM_NVN_REGLUM 的 CPU 行按 4 字节/像素读，且拷的是 src（8 位） | ✓ | 16F 下按 4 字节读会错位（每像素 8 字节），亮度/缩略图全错且不报错 |
+
+## 哪条路读哪块纹理（这张表之所以必要）
+
+| 纹理 | 格式 | 谁读它 | 读的时候假设什么 |
+| --- | --- | --- | --- |
+| 游戏画面 `src` | BGRA8（NVN 交换链） | `present_blit`/`present_encode` 的 fragment、`grab_present`、`rl_row` | 编码域 0–1、4 字节/像素 |
+| 上屏画布 `dr.texture` | 8 位 或 **RGBA16Float** | 只有画布本身 | 16F 时是**线性**值、可 > 1、8 字节/像素 |
+| 补帧输入/中间 `in_tex`/`mid_tex` | `f->cfmt` | MetalFX、`fsCopy`、`present_blit_m4` | 跟画布同格式（否则 >1 高光被压平） |
+| 运动矢量 `f->motion` | `RG16Float` | MetalFX | 位移 float2（±16 像素，8 字节/像素） |
+| 直方图 `hist` | `uint32` buffer | CPU（`copyFromBuffer` 256×4 B） | 与纹理格式无关；分箱在 MSL 里做 |
+| luma 缩略 `lumaCur/lumaPrev` | `R16Float` | `match`/`spread` | 编码域 luma（16F 输入要先 `to_enc`，见 `docs/FI-DOMAIN.md`） |
 
 ## 这些断言证明什么、不证明什么
 

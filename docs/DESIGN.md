@@ -660,3 +660,21 @@ CPU bulk 给 **0.4204**（hi 0.5256）。后果不是「画面变亮」而是**�
 不修的理由：这条 kernel 从未被调度；剔除要求两遍扫（找 top → 判 gap → 再扫），在单线程
 compute kernel 里做等于把 256 格扫三遍。真要让 GPU 算 knee 时再补，届时 `t_hdr_gpu_l1.c`
 的第 8 条断言会立刻变成红的（它断的是「MSL 白点比 CPU bulk 高 1 stop 以上」这个当前事实）。
+
+## 纹理格式地图（16F 画布换来的边界）
+
+补丁把上屏画布从 `BGRA8Unorm` 换成 `RGBA16Float`，但**没有**换游戏画面纹理。这块最容易
+搞混，所以单列一张表（由 `scripts/check_format_assumptions.py` 的 13 条断言守着，
+`docs/UPSTREAM-ASSUMPTIONS.md` 是生成版）：
+
+| 纹理 | 格式 | 谁读它 | 假设 |
+| --- | --- | --- | --- |
+| 游戏画面 `src` | BGRA8（NVN 交换链，未变） | 上屏 fragment、`grab_present`、`rl_row` | 编码域 0–1、4 字节/像素 |
+| 上屏画布 `dr.texture` | 8 位 或 RGBA16Float | 只有画布 | 16F 是线性值、可 > 1、8 字节/像素 |
+| 补帧 `in_tex`/`mid_tex` | `f->cfmt` | MetalFX、`fsCopy`、`present_blit_m4` | 与画布同格式 |
+| 运动矢量 `f->motion` | RG16Float | MetalFX | 位移 float2 |
+| 直方图 `hist` | uint32 buffer | CPU 回读 1 KB | 与纹理格式无关 |
+| luma 缩略 | R16Float | `match`/`spread` | 编码域（16F 要 `to_enc`） |
+
+**推论**：整窗截图（`grab_present`）截的是**游戏画面**而不是扩张后的 HDR 画面——这是刻意的，
+autoplayer 拿它和游戏自己的画面比对；HDR 的扩张只发生在画布那一步。
