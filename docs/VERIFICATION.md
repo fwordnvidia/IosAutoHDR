@@ -32,7 +32,10 @@ concurrency、timeout ≤20 分钟、不许 matrix / `secrets.` / `xcodebuild`�
 `4e/5` 补丁新鲜度（`src/` 是唯一真相源、补丁是它的**产物**：遍历 `src/*` 按
 `make_patch.sh` 的同一套映射算出树里路径并逐字节比较，反向再要求补丁里每个文件都有
 `src/` 来源。不同步时 4/5 测的是补丁里的旧内容、`check_counts`/`check_msl` 核的是
-`src/` 里的新内容——一半闸门测旧一半测新，仍然全绿；这一条就是拦它）
+`src/` 里的新内容——一半闸门测旧一半测新，仍然全绿；这一条就是拦它） →
+`4f/5` 两种打补丁工具结果一致（我们全程 `git apply`，使用者手上可能只有 GNU `patch`：
+把它打进临时副本，再与 `git apply` 的结果 `diff -r` 逐字节比；两边都不许留 `.rej`/`.orig`，
+GNU patch 也不许报 `with fuzz`——fuzz 意味着上下文差几行它自己贴偏了）
 
 它不做的事：
 编译 MSL、编译 ObjC、链接、真机——见文末。

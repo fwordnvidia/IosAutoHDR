@@ -272,9 +272,13 @@ if [ $# -ge 1 ]; then
     # check_counts/check_msl 核的是 src 里的新内容 —— 一半闸门测旧、一半测新，全绿。
     step "4e/5 补丁新鲜度（src/ 与补丁打出来的树逐字节一致）"
     python3 scripts/check_patch_fresh.py "$1" || fail=1
+    # 我们全程用 `git apply`，而使用者手上很可能只有 GNU `patch`。两者「都成功」不等于
+    # 「结果一样」：GNU patch 有 fuzz 容忍度、还会写 .orig/.rej。这条把两份结果逐字节比对。
+    step "4f/5 两种打补丁工具结果一致（git apply vs GNU patch -p1）"
+    ./scripts/check_patch_tools.sh "$1" || fail=1
 else
     echo "  跳过（没给树根）；CI 里由 verify.yml 完成这一步"
-    echo "  （4b/5 格式假设、4c/5 C 符号对账、4d/5 MSL 符号对账、4e/5 补丁新鲜度也要树根，一并跳过）"
+    echo "  （4b/5 格式假设、4c/5 C 符号对账、4d/5 MSL 符号对账、4e/5 补丁新鲜度、4f/5 双工具一致性也要树根，一并跳过）"
 fi
 
 step "5/5 结论"
