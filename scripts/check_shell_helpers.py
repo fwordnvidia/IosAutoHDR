@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""shell 里三类「看不见的假绿」，每条都是真踩过才写的。
+r"""shell 里三类「看不见的假绿」，每条都是真踩过才写的。
 
 ## 1. 调用不存在的辅助函数：`ok: not found` 这类错误只写 stderr，不会让脚本判红
 
@@ -33,7 +33,10 @@ import os
 import re
 import sys
 
-HELPERS = ("ok", "bad", "step", "die", "warn", "note", "info")
+# `say` 曾经漏在这张表外：2026-11-18 在 /home/sechs/ios-build/scripts/check_repo_hygiene.sh
+# 里写了 say "…"，那个文件只定义 ok()/bad()，跑出来是 `say: not found`、卫生检查照样
+# 打「✓ 通过」。规则 1 用的就是这张表，漏一个名字就等于漏一整类。
+HELPERS = ("ok", "bad", "step", "die", "warn", "note", "info", "say")
 DEF_RE = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(\)", re.M)
 CALL_RE = re.compile(r"^\s*(%s)\s+[\"'$A-Za-z0-9_-]" % "|".join(HELPERS), re.M)
 SRC_RE = re.compile(r"^\s*(?:\.|source)\s+\S", re.M)
@@ -116,7 +119,7 @@ def main():
     if bad:
         print("✗ shell 辅助函数检查：%d 处" % bad)
         return 1
-    print("✓ shell 检查：%d 个脚本 —— OK：① ok/bad/step/… 都定义过 ② 提示串里没有反引号"
+    print("✓ shell 检查：%d 个脚本 —— OK：① ok/bad/step/say/… 都定义过 ② 提示串里没有反引号"
           " ③ if/while 条件里没有「管道末段是 tail」" % len(files()))
     return 0
 

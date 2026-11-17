@@ -44,7 +44,7 @@ cp "$ROOT/CONTRIBUTING.md" "$ROOT/SECURITY.md" "$DST/" || exit 1
 # ② 投影里的 NOTICE 其实是**上游**那份，列的是上游打进去的三方件（GPL bash、Ryujinx…），
 #    还指向 THIRD_PARTY_LICENSES.md 与 docs/第三方依赖.md —— 这两个文件投影里根本没有。
 # 不分发上游代码却挂上游的三方清单，等于对外声称一件不存在的事。
-cp "$ROOT/LICENSE" "$ROOT/NOTICE" "$DST/" || exit 1
+cp "$ROOT/LICENSE" "$ROOT/NOTICE" "$ROOT/CODE_OF_CONDUCT.md" "$DST/" || exit 1
 
 # .github 里的**社区文件**（issue 表单、PR 模板）与 CI 是两件事：推它们不需要 PAT 的
 # `workflow` scope（只有 `.github/workflows/*.yml` 才是 workflow 文件），所以默认同步。
@@ -83,7 +83,7 @@ fi
 # 于是「拷贝失败」与「本来就没有」长得一模一样。这里按名字点一遍必须存在的产物 ——
 # 2026-11-18 出过：社区文件拷进去了，随后 `rm -rf $DST/.github` 又删掉，rc 仍是 0。
 missing=""
-for f in README.md CONTRIBUTING.md SECURITY.md LICENSE NOTICE run_all.sh verify.sh \
+for f in README.md CONTRIBUTING.md SECURITY.md CODE_OF_CONDUCT.md LICENSE NOTICE run_all.sh verify.sh \
          .gitattributes .github/pull_request_template.md \
          .github/ISSUE_TEMPLATE/bug_report.yml \
          patch/hdr-auto-l1.patch patch/BASELINE src docs scripts tools; do

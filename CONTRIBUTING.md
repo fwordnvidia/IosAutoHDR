@@ -48,6 +48,12 @@ CI 文件扩权**是这个仓库的既定选择，投影默认不带它（`SYNC_
 （`S2A_HDR_LOG=1` 的 `HDR stat:` 行，或三格矩阵 T1/T2/T3 的截图 + 日志），会优先看，
 那是这个补丁目前最缺的证据。
 
-## 六、安全相关
+## 六、行为准则与安全
+
+讨论以技术为主，基本的相处规则写在 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。
+
+安全相关见下一节——漏洞不要开公开 issue。
+
+## 七、安全相关
 
 见 [`SECURITY.md`](SECURITY.md)。请不要在公开 issue 里贴可直接利用的 PoC。

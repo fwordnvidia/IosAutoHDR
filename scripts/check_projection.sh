@@ -75,15 +75,16 @@ grep -q 'jhaizhou-ops/S2Arm' README.md 2>/dev/null && ok "README 写明上游出
 # 投影里那份 NOTICE 甚至是上游的三方清单（列着 GPL bash、Ryujinx，指向投影里不存在的
 # THIRD_PARTY_LICENSES.md）。文件在、内容错，比缺文件更难发现。
 _SRC=${SRC:-/home/sechs/ios-build/hdr-auto}
-for f in LICENSE NOTICE; do
+for f in LICENSE NOTICE CODE_OF_CONDUCT.md CONTRIBUTING.md SECURITY.md; do
     if [ -f "$f" ] && [ -f "$_SRC/$f" ] && cmp -s "$f" "$_SRC/$f"; then
         ok "$f 与源码树逐字节相同"
     else
         bad "$f 与 $_SRC/$f 不一致（同步漏了这一步？）"
     fi
 done
-# 社区档案：GitHub 只在「根级」或「.github/」找 CONTRIBUTING/SECURITY，而投影不带 .github/
-# ⇒ 这两个文件必须在根级存在，否则仓库页永远提示「添加贡献指南」，health 停在 42%。
+# 社区档案：GitHub 只在「根级」或「.github/」找 CONTRIBUTING/SECURITY/CODE_OF_CONDUCT，
+# 而投影默认不带 `.github/`（只带 issue 表单与 PR 模板）⇒ 这三个文件必须在根级存在，
+# 否则仓库页一直提示「添加贡献指南 / 行为准则」，health 卡在中间。
 for f in CONTRIBUTING.md SECURITY.md; do
     [ -f "$f" ] && ok "$f 在根级（GitHub 只认根级或 .github/，投影不带后者）" || bad "缺 $f —— 仓库页会一直提示「添加贡献指南」"
 done
