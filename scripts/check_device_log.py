@@ -10,6 +10,11 @@
     ./scripts/check_device_log.py --log device.log              # 只做通用一致性检查
     ./scripts/check_device_log.py --selftest                    # 用合成日志自测判据
 
+通用检查里有一条是「正面证据」判据：16F 真在上屏（fmt=16F 且 itm=1）时，日志必须有
+一行 `HDR: EDR 上界跟随已启用`。没有它而 head 又恰好是个好看的数，说明 `hdr_head_tick()`
+每帧早退（Metal 3 下 `g_present_layer_resident` 曾恒 nil）——或者日志来自修复前的构建。
+显式 `S2A_HDR_HEADROOM` 的运行按设计让位（打的是「显式指定」那行），不在此列。
+
 三格矩阵（与 docs/PR.md「已知未验证」一致）：
     T1  S2A_HDR_FMT=1               只看格式：期望 fmt=16F，但 head 应停在 1.00（没声明 EDR，系统不给余量）
     T2  S2A_HDR_OUTPUT=1            期望 fmt=16F 且 head>1.0（XDR 屏才有 >1；SDR 屏 head=1.0 属正常）
@@ -27,6 +32,11 @@ STAT_RE = re.compile(
     r"frozen=(?P<frozen>[01]) itm=(?P<itm>[01])(?: map=(?P<map>[01]))?")
 # map 字段是后加的：旧日志没有它，按 0（拐点档）理解，不能因为「没这个字段」就判整行无效。
 FALLBACK_RE = re.compile(r"16F 画布连续 \d+ 帧取不到 drawable")
+# 「上界跟随真的在跑」的唯一正面证据（hdr_head_tick 第一次读到合法上界时打一行）。
+# 光看 head 数值分不出「跟随没跑、停在缺省 2.0」与「屏幕本来就这么亮」。
+FOLLOW_RE = re.compile(r"EDR 上界跟随已启用")
+# 显式 S2A_HDR_HEADROOM 时 tick 按设计让位、只打这一行 —— 没有 follow 行是正常的。
+PINNED_RE = re.compile(r"S2A_HDR_HEADROOM 显式指定")
 REARM_RE = re.compile(r"重新试探 16F 画布")
 # 真机上 MSL 是运行时从源码编译的（newLibraryWithSource:），所以「xcrun metal 能抓的错」
 # 在设备上表现为 program_source 报错行。没有这条判据时，这类失败只会表现为
@@ -59,6 +69,8 @@ def parse(text):
         "fallback": len(FALLBACK_RE.findall(text)),
         "rearm": len(REARM_RE.findall(text)),
         "msl_err": len(MSL_ERR_RE.findall(text)),
+        "follow": len(FOLLOW_RE.findall(text)),
+        "pinned": len(PINNED_RE.findall(text)),
     }
 
 
@@ -86,6 +98,15 @@ def common_checks(parsed):
             bad.append("第 %d 行：knee_lo=%.4f 不在 [0,1]" % (i + 1, s["lo"]))
         if s["lo"] + s["de"] > 1.0001:
             bad.append("第 %d 行：knee_hi=%.4f 超过 SDR 裁切点 1.0" % (i + 1, s["lo"] + s["de"]))
+    # 真在上屏（16F 且走 ITM）却没有任何「跟随已启用」行 ⇒ tick 每帧早退。
+    #   这是 2026-11-18 修的那个 bug 的**设备侧**判据：Metal 3 下指针恒 nil，
+    #   功能全无、head 停在起局缺省值、日志一片安静 —— 只能靠「少了一行」发现。
+    if any(s["fmt"] == "16F" and s["itm"] for s in st) and not parsed["follow"] and not parsed["pinned"]:
+        bad.append("有 16F+ITM 的上屏记录，但整份日志没有「EDR 上界跟随已启用」这一行 —— "
+                   "hdr_head_tick() 每帧早退（g_present_layer_resident 又变 nil？Metal 3 那个 bug 复发），"
+                   "或日志来自修复前的构建；此时 head 是起局缺省值，不是屏幕读数")
+    if parsed["pinned"]:
+        notes.append("显式 S2A_HDR_HEADROOM：上界跟随按设计让位，head 不反映屏幕")
     drift = 0.0
     for a, b in zip(st, st[1:], strict=False):
         if not a["frozen"]:            # 冻结帧之间比跳变没有意义（本来就是刻意保持）
@@ -134,17 +155,23 @@ def expect_checks(parsed, which):
 
 
 SELFTEST_CASES = {
-    "t1": ("HDR stat: fmt=16F head=1.00 knee=0.3400+0.6600 white=0.7900 avg=-1.20 scene=0.00 frozen=0 itm=1", "t1", True),
-    "t2": ("HDR stat: fmt=16F head=2.00 knee=0.3400+0.6600 white=0.7900 avg=-1.20 scene=0.00 frozen=0 itm=1", "t2", True),
-    "t2_sdr": ("HDR stat: fmt=16F head=1.00 knee=0.3400+0.6600 white=0.7900 avg=-1.20 scene=0.00 frozen=0 itm=1", "t2", False),
+    # 每条都是「真机上会看到的样子」：先一行跟随启用（正面证据），再若干 HDR stat
+    "t1": ("I/nvn: HDR: EDR 上界跟随已启用（首帧读数 1.00）\n"
+           "HDR stat: fmt=16F head=1.00 knee=0.3400+0.6600 white=0.7900 avg=-1.20 scene=0.00 frozen=0 itm=1", "t1", True),
+    "t2": ("I/nvn: HDR: EDR 上界跟随已启用（首帧读数 2.00）\n"
+           "HDR stat: fmt=16F head=2.00 knee=0.3400+0.6600 white=0.7900 avg=-1.20 scene=0.00 frozen=0 itm=1", "t2", True),
+    "t2_sdr": ("I/nvn: HDR: EDR 上界跟随已启用（首帧读数 1.00）\n"
+               "HDR stat: fmt=16F head=1.00 knee=0.3400+0.6600 white=0.7900 avg=-1.20 scene=0.00 frozen=0 itm=1", "t2", False),
     "t3": ("HDR stat: fmt=8B head=1.00 knee=0.3400+0.6600 white=0.7900 avg=-1.20 scene=0.00 frozen=0 itm=0", "t3", True),
     "t3_bad": ("HDR stat: fmt=8B head=1.00 knee=0.3400+0.6600 white=0.7900 avg=-1.20 scene=0.00 frozen=0 itm=1", "t3", False),
     "t1_bad": ("HDR stat: fmt=8B head=2.00 knee=0.3400+0.6600 white=0.7900 avg=-1.20 scene=0.00 frozen=0 itm=0", "t1", False),
     "black": ("I/nvn: HDR: 16F 画布连续 60 帧取不到 drawable，已回退 8 位上屏（HDR 关闭）", None, None),
     # map 字段（后加）：旧日志没有它 → 按 0 理解，必须仍然判过
-    "old_no_map": ("HDR stat: fmt=16F head=2.00 knee=0.3400+0.6600 white=0.7900 avg=-1.20 scene=0.00 frozen=0 itm=1", "t2", True),
+    "old_no_map": ("I/nvn: HDR: EDR 上界跟随已启用（首帧读数 3.00）\n"
+                   "HDR stat: fmt=16F head=2.00 knee=0.3400+0.6600 white=0.7900 avg=-1.20 scene=0.00 frozen=0 itm=1", "t2", True),
     # 内容映射档：map=1、fmt=16F、itm=1 是合法组合（knee 仍在算，只是没用于上屏）
-    "map1_ok": ("HDR stat: fmt=16F head=2.00 knee=0.3400+0.6600 white=0.7900 avg=-1.20 scene=0.00 frozen=0 itm=1 map=1", "t2", True),
+    "map1_ok": ("I/nvn: HDR: EDR 上界跟随已启用（首帧读数 2.00）\n"
+                "HDR stat: fmt=16F head=2.00 knee=0.3400+0.6600 white=0.7900 avg=-1.20 scene=0.00 frozen=0 itm=1 map=1", "t2", True),
     # 内容映射落在 8 位画布上：走不到 HDR fragment，说明开关接了但管线没换
     # MSL 在真机上编不过：只有 program_source 报错、没有 stat 行 —— 必须判红，不能当成「没开日志」
     "msl_fail": ("E nvn: program_source:41:9: error: use of undeclared identifier 'to_enc'\n"
@@ -152,6 +179,11 @@ SELFTEST_CASES = {
     "msl_fail_with_stat": ("program_source:41:9: error: no matching function for call to 'select'\n"
                            "HDR stat: fmt=16F head=2.00 knee=0.3400+0.6600 white=0.7900 avg=-1.20 scene=0.00 frozen=0 itm=1", "t2", False),
     "map1_8b": ("HDR stat: fmt=8B head=1.00 knee=0.3400+0.6600 white=0.7900 avg=-1.20 scene=0.00 frozen=0 itm=0 map=1", "t3", False),
+    # 16F 在上屏、却没有任何「跟随已启用」行 = Metal 3 那个静默失效复发（或旧构建）
+    "no_follow": ("HDR stat: fmt=16F head=2.00 knee=0.3400+0.6600 white=0.7900 avg=-1.20 scene=0.00 frozen=0 itm=1", "t2", False),
+    # 显式 HEADROOM 时让位是设计行为：有「显式指定」行、没有「跟随启用」行 ⇒ 合法
+    "pinned": ("I/nvn: HDR: S2A_HDR_HEADROOM 显式指定，运行期不跟随屏幕 EDR 上界（要跟随就 unset 它）\n"
+               "HDR stat: fmt=16F head=2.00 knee=0.3400+0.6600 white=0.7900 avg=-1.20 scene=0.00 frozen=0 itm=1", "t2", True),
 }
 
 

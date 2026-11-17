@@ -15,7 +15,7 @@
 | 签名 | 通道在：`ios-altserver --apple-id … --ipa …` 现场向 Apple 申请免费证书（7 天） | `~/.local/ios-kit/bin/ios-altserver` 头注释 |
 | 截图 | 不通，需要先挂 Developer Disk Image | `idevicescreenshot` → `Could not start screenshotr service!` |
 
-也就是说：**装、跑、抓日志这三件都不缺工具**，`scripts/check_device_log.py`（13 项自测）随时可以判一份真机日志。
+也就是说：**装、跑、抓日志这三件都不缺工具**，`scripts/check_device_log.py`（15 项自测）随时可以判一份真机日志。
 
 ## 一·五、诊断行不在 syslog 里，得读文件（本轮查清的）
 
@@ -34,6 +34,12 @@ HDR stat 那行走 `s2a_log_line2` → `write(fd 2)`，而 runtime 的 `logfd_re
 
 `./scripts/fetch_device_log.sh <bundle-id>` 把这两条串起来（先 ifuse，再回退隧道），
 拿到之后直接 `./scripts/check_device_log.py --log <文件> --expect t1|t2|t3`。
+
+判读时认一条**正面证据**：`HDR: EDR 上界跟随已启用（首帧读数 x.xx）`。这行由
+`hdr_head_tick()` 第一次真读到屏幕上界时打一次；它缺席而 16F 又在上屏（`fmt=16F itm=1`），
+说明每帧早退 —— 即 `g_present_layer_resident` 又变回 nil（Metal 3 那条路上它曾恒 nil，
+功能全无、日志全静）。显式 `S2A_HDR_HEADROOM` 的运行打的是另一行（「显式指定…让位」），
+不在此列。
 
 **给自己的包加一个键就能走路径 A**：`UIFileSharingEnabled=true`（开发包专用，玩家包里可以不加）。
 这比在 macOS 上配 tunnel + sudo 省事得多，也是当初 `host.log` 写到 Documents 的意义。

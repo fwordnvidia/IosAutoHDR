@@ -65,7 +65,7 @@ GNU patch 也不许报 `with fuzz`——fuzz 意味着上下文差几行它自�
 | 结论 | 命令 | 期望 |
 |---|---|---|
 | 补丁能在干净 `d5cbf7ff53f7` 上无冲突应用 | `git apply --check patch/hdr-auto-l1.patch`（在干净树） | 0 退出；42 个文件 |
-| 补丁文件指纹 | `sha256sum patch/hdr-auto-l1.patch` | `6742716a…`（42 文件，+6941 −27 行） |
+| 补丁文件指纹 | `sha256sum patch/hdr-auto-l1.patch` | `42f86d35…`（42 文件，+6947 −27 行） |
 | MSL 能按 Makefile 规则嵌入 | `python3 graphics/metal/tools/embed_msl.py graphics/nvn/shaders/hdr_hist.metal k_hdr_hist out.h` | 7,948 B |
 
 上游跟随：`./scripts/check_upstream.sh` 会同时报**默认分支**与**最新 tag**，并以默认分支上能否干净打上为准
@@ -126,14 +126,19 @@ HDR stat: fmt=16F head=2.00 knee=0.7424+0.2576 white=0.7424 avg=-3.89 scene=0.00
 ```
 ./scripts/check_device_log.py --log device.log                 # 通用一致性
 ./scripts/check_device_log.py --log device.log --expect t1     # 或 t2 / t3
-./scripts/check_device_log.py --selftest                       # 8 项合成日志自测
+./scripts/check_device_log.py --selftest                       # 15 项合成日志自测
 ```
 
 - 通用检查抓「格式换了 shader 没换」的四种指纹：`fmt=8B` 却 `itm=1`、`fmt=16F` 却 `itm=0`、
   `head` 出 `[1,4]`、`knee_hi` 超 1.0（都报到具体行号）；
 - 单格判据：T1 = `16F` 且 `head` 停在 1.00；T2 = `16F` 且 `head>1.0`（SDR 屏上被判「测不到」而非 bug）；
   T3 = `8B` 且 `itm=0`；
-- 日志里只有「16F 连续 60 帧取不到 drawable」而无 stat 行 ⇒ 直接判「**黑屏假设成立**」。
+- 日志里只有「16F 连续 60 帧取不到 drawable」而无 stat 行 ⇒ 直接判「**黑屏假设成立**」；
+- **正面证据判据**：`fmt=16F` 且 `itm=1`（HDR 真在上屏）时，整份日志必须出现过
+  `HDR: EDR 上界跟随已启用`。这行由 `hdr_head_tick()` 第一次读到合法上界时打一次；没有它
+  说明 tick 每帧早退（`g_present_layer_resident` 又变 nil —— Metal 3 那条路上它曾恒 nil，
+  功能全无、日志全静），或日志来自修复前的构建。显式 `S2A_HDR_HEADROOM` 的运行按设计让位，
+  打的是「显式指定…」那行，不在此列。
 
 `run_all.sh` 的 `0x/5` 会跑自测，并用 `hdr_ref --stat-line` 的真行验两个方向（T2 必须通过、
 T3 必须失败），避免判据只会点头。

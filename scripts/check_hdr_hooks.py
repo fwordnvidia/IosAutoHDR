@@ -16,6 +16,7 @@
   H4 取不到 drawable 的块里同时有降级（step）与回头路（rearm）
   H5 降级块同时改像素格式与颜色空间（只改格式 ⇒ 画面发灰发亮，比黑屏更难查）
   H6 回头路块把 16F / EDR / 扩展线性 sRGB 三件一起装回去
+  H7 tick 第一次真读到上界就打一行「已启用」——没有正面证据就没法在设备日志里判活
 
 用法：scripts/check_hdr_hooks.py [树根]（缺省用 src/ 里的真相源，不需要树）
 """
@@ -94,6 +95,12 @@ def main():
     elif lay >= 0 and pin > lay:
         fails.append("H3:%d hdr_head_tick() 的让位判据排在读图层之后（顺序反了也可以，但别写成两个分支）" % i0)
 
+    # H7：必须有一条**正面**日志 —— 光看「head 是几」分不出「跟随没跑」与「屏幕本来就这么亮」
+    if "EDR 上界跟随已启用" not in "\n".join(body):
+        fails.append("H7:%d hdr_head_tick() 里没有「EDR 上界跟随已启用」那行日志 —— "
+                     "设备日志里就再没有「这条路径真的跑到了」的正面证据，"
+                     "指针又变 nil 时只能靠人猜" % i0)
+
     # H4/H5/H6：取不到 drawable 的块
     j0, j1, nil = block(lines, "if (!dr) {", "if (!dr) 块")
     nil_text = "\n".join(nil)
@@ -128,7 +135,7 @@ def main():
     if fails:
         print("✗ HDR 钩子检查：%d 处" % len(fails))
         return 1
-    print("✓ HDR 钩子：图层每帧记、两处 tick、让位判据、降级与回头路成对（%d 条）" % 6)
+    print("✓ HDR 钩子：图层每帧记、两处 tick、让位判据、降级与回头路成对、跟随有正面日志（%d 条）" % 7)
     return 0
 
 

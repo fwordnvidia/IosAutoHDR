@@ -1699,7 +1699,7 @@ index 00000000..a001187a
 +
 +#endif
 diff --git a/graphics/nvn/gfx/nvn/nvn_mtl.m b/graphics/nvn/gfx/nvn/nvn_mtl.m
-index c32e6b01..dc85806d 100644
+index c32e6b01..0c35e67f 100644
 --- a/graphics/nvn/gfx/nvn/nvn_mtl.m
 +++ b/graphics/nvn/gfx/nvn/nvn_mtl.m
 @@ -817,7 +817,7 @@ void mtl_init(void) {
@@ -1711,7 +1711,7 @@ index c32e6b01..dc85806d 100644
              if (!g_present_uv[i]) MDIE("failed to create present UV buffer[%d]", i);
              res_add(g_present_uv[i]);
          }
-@@ -17595,17 +17595,147 @@ static CAMetalLayer *g_present_layer_resident;
+@@ -17595,17 +17595,153 @@ static CAMetalLayer *g_present_layer_resident;
  #endif
  void mtl_present_test_stall(uint64_t ns) { g_present_stall_ns = ns; }
  #include "nvn_present_aa.inc"
@@ -1762,6 +1762,12 @@ index c32e6b01..dc85806d 100644
 +    if (![layer respondsToSelector:@selector(maximumExtendedDynamicRangeColorComponent)]) return;
 +    float cur = (float)[layer maximumExtendedDynamicRangeColorComponent];
 +    if (!(cur >= 1.0f)) return;
++    // 第一次真读到上界就打一行：这是「上界跟随真的在跑」唯一的**正面**证据。
++    //   Metal 3 上指针曾经恒 nil（赋值点被 !g_m3 绑死），于是 tick 每帧早退、功能全无而日志全静；
++    //   光靠「head 是几」看不出病——SDR 屏本来就该是 1.0。所以没有这一行、而 16F 又在上屏，
++    //   check_device_log.py 直接判红。
++    static int follow_logged;
++    if (!follow_logged) { follow_logged = 1; MLOG("HDR: EDR 上界跟随已启用（首帧读数 %.2f）", (double)cur); }
 +    float was = g_hdr_knee[2];
 +    float now = s2a_hdr_head_track(was, cur);
 +    if (now == was) return;
@@ -1860,7 +1866,7 @@ index c32e6b01..dc85806d 100644
          if (!lib) MDIE("present shader compile failed %s", e.localizedDescription.UTF8String);
          MTLRenderPipelineDescriptor *pd = [MTLRenderPipelineDescriptor new];
          pd.vertexFunction = [lib newFunctionWithName:@"vs"]; pd.fragmentFunction = [lib newFunctionWithName:@"fs"];
-@@ -17636,6 +17766,7 @@ static id<MTLTexture> present_raw_src(id<MTLTexture> src) {
+@@ -17636,6 +17772,7 @@ static id<MTLTexture> present_raw_src(id<MTLTexture> src) {
  __attribute__((weak)) double s2a_cpatch_present_aspect(void) { return 0; }   // native runtime/src/cpatch.c: current aspect while an adaptive community widescreen patch is on; graphics unit tests without the host have none
  #include "nvn_present_fit.h"   // pf_crop_fit (present_now) / pf_viewport (both blits); plain C, tested by graphics/nvn/tests/t_present_fit.c
  static int present_blit(id<MTLCommandBuffer> cb, id<MTLTexture> src, id<MTLTexture> dst, const int crop[4], BOOL flip, int screen) {
@@ -1868,7 +1874,7 @@ index c32e6b01..dc85806d 100644
      NSUInteger cx = 0, cy = 0, cw = src.width, ch = src.height;
      if (crop && (crop[2] || crop[3])) {
          if (crop[0] < 0 || crop[1] < 0 || crop[2] <= 0 || crop[3] <= 0 ||
-@@ -17666,8 +17797,12 @@ static int present_blit(id<MTLCommandBuffer> cb, id<MTLTexture> src, id<MTLTextu
+@@ -17666,8 +17803,12 @@ static int present_blit(id<MTLCommandBuffer> cb, id<MTLTexture> src, id<MTLTextu
      id<MTLRenderCommandEncoder> en = [cb renderCommandEncoderWithDescriptor:rp];
      [en setViewport:vp];
      [en setRenderPipelineState:g_blit_pso]; [en setFragmentTexture:present_raw_src(src) atIndex:0]; [en setFragmentSamplerState:g_blit_samp atIndex:0];
@@ -1883,7 +1889,7 @@ index c32e6b01..dc85806d 100644
      if (flip) { uv[1] += uv[3]; uv[3] = -uv[3]; }   // lower-left origin: the window image is stored bottom-up
      [en setFragmentBytes:uv length:sizeof uv atIndex:0];
      [en drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
-@@ -17675,6 +17810,7 @@ static int present_blit(id<MTLCommandBuffer> cb, id<MTLTexture> src, id<MTLTextu
+@@ -17675,6 +17816,7 @@ static int present_blit(id<MTLCommandBuffer> cb, id<MTLTexture> src, id<MTLTextu
      return 1;
  }
  static int present_blit_m4(id<MTL4CommandBuffer> cb, id<MTLTexture> src, id<MTLTexture> dst, const int crop[4], id<MTLBuffer> uvBuffer, id table, BOOL flip, int screen) {
@@ -1891,7 +1897,7 @@ index c32e6b01..dc85806d 100644
      NSUInteger cx = 0, cy = 0, cw = src.width, ch = src.height;
      if (crop && (crop[2] || crop[3])) {
          if (crop[0] < 0 || crop[1] < 0 || crop[2] <= 0 || crop[3] <= 0 ||
-@@ -17703,6 +17839,13 @@ static int present_blit_m4(id<MTL4CommandBuffer> cb, id<MTLTexture> src, id<MTLT
+@@ -17703,6 +17845,13 @@ static int present_blit_m4(id<MTL4CommandBuffer> cb, id<MTLTexture> src, id<MTLT
      float *uv = uvBuffer.contents;
      uv[0] = (float)cx / src.width; uv[1] = (float)cy / src.height; uv[2] = (float)cw / src.width; uv[3] = (float)ch / src.height;
      uv[4] = (cx + 0.5f) / src.width; uv[5] = (cy + 0.5f) / src.height; uv[6] = (cx + cw - 0.5f) / src.width; uv[7] = (cy + ch - 0.5f) / src.height;
@@ -1905,7 +1911,7 @@ index c32e6b01..dc85806d 100644
      if (flip) { uv[1] += uv[3]; uv[3] = -uv[3]; }   // normalized AA input is already upright
      tab_buf(table, uvBuffer, 0, 0);
      [en setViewport:vp]; [en setRenderPipelineState:g_blit_pso];
-@@ -17726,11 +17869,17 @@ static const int *rs_aa_crop(id<MTLTexture> src, id<MTLTexture> dst, const int c
+@@ -17726,11 +17875,17 @@ static const int *rs_aa_crop(id<MTLTexture> src, id<MTLTexture> dst, const int c
      if (!vw || !vh || vw > w || vh > h || (vw == w && vh == h)) return crop;
      tmp[0] = tmp[1] = 0; tmp[2] = (int)vw; tmp[3] = (int)vh; return tmp;
  }
@@ -1925,7 +1931,7 @@ index c32e6b01..dc85806d 100644
      id<MTLTexture> out;
      if (g_present_aa) {
          int ac[4]; NvPresentAA *s = present_aa_prepare(slot, src, rs_aa_crop(src, dst, crop, fx, ac));   // rs_aa_crop
-@@ -17757,8 +17906,12 @@ API_AVAILABLE(macos(26.0), ios(26.0))
+@@ -17757,8 +17912,12 @@ API_AVAILABLE(macos(26.0), ios(26.0))
  static int present_encode_m4(id<MTL4CommandBuffer> cb, id<MTLTexture> src, id<MTLTexture> dst, const int crop[4], int slot) {
      present_options();
      BOOL flip = atomic_load_explicit(&g_origin_ll, memory_order_relaxed) != 0;
@@ -1940,7 +1946,7 @@ index c32e6b01..dc85806d 100644
      id<MTLTexture> out;
      if (g_present_aa) {
          int ac[4]; NvPresentAA *s = present_aa_prepare(slot, src, rs_aa_crop(src, dst, crop, fx, ac));   // rs_aa_crop
-@@ -17912,7 +18065,13 @@ static int present_now(const tex_t *t, double period, uint64_t frame, uint64_t t
+@@ -17912,7 +18071,13 @@ static int present_now(const tex_t *t, double period, uint64_t frame, uint64_t t
      if (!layer) { NSUInteger icw = pcw, ich = pch;   // game units (pcw x pch above; was the crop / source size read here)
          float ky = s2a_widen_ky(); fit_geom(16.0 / 9.0 * s2a_widen_k() / (ky > 0 ? ky : 1) * ich, ich, icw, ich); }
      if (!layer) { if (g_grab_cb) grab_present(src, crop, nolayer_sz, ticket); return 0; }   // nolayer_sz (above; the same expression on the canvas)
@@ -1955,7 +1961,7 @@ index c32e6b01..dc85806d 100644
  #if TARGET_OS_OSX
      if (!layer.displaySyncEnabled) layer.displaySyncEnabled = YES;   // Windowed mode follows the display's vsync to prevent tearing
  #endif
-@@ -17923,7 +18082,47 @@ static int present_now(const tex_t *t, double period, uint64_t frame, uint64_t t
+@@ -17923,7 +18088,47 @@ static int present_now(const tex_t *t, double period, uint64_t frame, uint64_t t
      uint64_t dt0 = now_ns();
      id<CAMetalDrawable> dr = supplied ? supplied : [layer nextDrawable];
      if (!supplied) g_drawable_ns += now_ns() - dt0;

@@ -203,8 +203,11 @@ step "0x/5 设备日志判读（三格矩阵 T1/T2/T3 的判据）"
 python3 scripts/check_device_log.py --selftest || fail=1
 # 这一步在 1/5 之前跑，不能假设 build/hdr_ref 已经存在（解包后第一次跑就是这种情况）
 [ -x ./build/hdr_ref ] || cc -O2 -w -I src tools/hdr_ref.c -lm -o build/hdr_ref || fail=1
-# 同一份格式化代码产出的真行必须被判读脚本认出来（fmt/head/knee/itm 全部字段）
-./build/hdr_ref --synth hud --frames 2 --stat-line > /tmp/dev_selftest.log 2>/dev/null || fail=1
+# 同一份格式化代码产出的真行必须被判读脚本认出来（fmt/head/knee/itm 全部字段）。
+# 真机日志里还有一行「EDR 上界跟随已启用」（tick 第一次读到上界时打），判读脚本要求它
+# 与 16F+ITM 同时出现 —— hdr_ref 是纯 CPU 参考实现，没有图层，所以这里手工补那一行，
+# 模拟「设备上真的跑起来了」的日志形状。
+{ echo "I/nvn: HDR: EDR 上界跟随已启用（首帧读数 2.00）"; ./build/hdr_ref --synth hud --frames 2 --stat-line; } > /tmp/dev_selftest.log 2>/dev/null || fail=1
 python3 scripts/check_device_log.py --log /tmp/dev_selftest.log --expect t2 >/dev/null || { echo "  ✗ 真行判读失败"; fail=1; }
 python3 scripts/check_device_log.py --log /tmp/dev_selftest.log --expect t3 >/dev/null 2>&1 && { echo "  ✗ T3 判据对 16F 行不该通过"; fail=1; }
 
