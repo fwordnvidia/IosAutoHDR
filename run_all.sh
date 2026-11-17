@@ -170,6 +170,11 @@ else
     echo "  · 未装 shellcheck —— 跳过（brew/apt install shellcheck，或下 release 的静态二进制）"
 fi
 
+step "0w17/5 C 警告审计（46 个带 main 的源文件用 -Wall -Wextra 重编一遍）"
+# 正式构建处处是 `cc -O2 -w`：-w 关掉全部警告，等于把编译器这个最基础的检查器关掉。
+# 一开就抓到 tools/sweep_darkproxy.c 里 proxy_gap() 定义了从没被调用（候选 3 的公式早内联了）。
+./scripts/check_c_warnings.sh || fail=1
+
 step "0w3/5 文档计数（套数 / 断言总数 / 上屏 fragment 字节数 必须与实测一致）"
 python3 scripts/check_counts.py || fail=1
 

@@ -47,6 +47,7 @@ SpecialK / BT.2087 / BT.2408-8 / Apple EDR / Microsoft scRGB，每条都写「�
 ./scripts/report_options.py          # docs/OPTIONS.md：47 个常数 + 9 个环境变量（说明取自源码注释）
 ./scripts/check_counts.py            # 文档里的套数/断言数/fragment 字节数 必须等于实测
 ./scripts/check_shell_helpers.py    # 脚本里调用的 ok/bad/step 必须有定义（`ok: not found` 不会置 fail）
+./scripts/check_c_warnings.sh        # 46 个源文件用 -Wall -Wextra 重编（正式构建的 -w 会遮住全部警告）
 ./scripts/check_upstream.sh      # 上游默认分支/tag 各在哪、补丁还能不能干净打上、是否纯增量
 ./scripts/publish.sh --preflight # 只读核对：上游是否又前进、正文 sha 是否过期、gh 能不能用
 ./scripts/publish.sh             # dry-run：只打印要执行的命令

@@ -36,13 +36,9 @@ static int proxy_avg(float avg, float white, float hi, float thr) {
     (void)hi;
     return white < thr || (avg < S2A_HDR_AVG_CUT + 1.0f && white > thr);
 }
-// 候选 3：白点与重心差 n stop 以上就判暗场（不看绝对白点）
-static int proxy_gap(float avg, float white, float hi, float gap) {
-    (void)hi;
-    if (!(white > 0.0f)) return 1;
-    float lg = log2f(white);
-    return (lg - avg) > gap;
-}
+// 候选 3（白点与重心差 n stop 以上判暗场）没有独立函数：它的公式在 main 里直接算进
+// gap 变量（第 80 行附近 `(gap > gaps[g]) != cpu`），因为要同时扫 8 个阈值。
+// 原来这里有个 proxy_gap()，从没人调 —— `-Wall -Wextra` 报 unused-function 才发现，已删。
 
 int main(int argc, char **argv) {
     const char *csv = argc > 1 ? argv[1] : "build/sweep_darkproxy.csv";

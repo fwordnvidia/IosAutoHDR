@@ -104,3 +104,18 @@ grep 命中、`!` 返回 1，脚本却继续打印「· 语法通过」⇒ 一�
 
 所以补了 `scripts/check_shell_helpers.py`：扫所有 `.sh`，把 `ok/bad/step/die/warn/note/info` 的调用
 与文件内定义比对，缺定义即判红（系统里没有叫这些名字的命令，「未定义即 bug」成立）。
+
+## C 侧：正式构建的 `-w` 把编译器关掉了（0w17/5）
+
+`run_all.sh` 里 21 处编译全是 `cc -O2 -w`。`-w` 关闭**全部**警告——编译器是最基础、最便宜的
+检查器，等于一直没接上。改成「正式构建继续用 `-w`（不动行为），另加一步用 `-Wall -Wextra`
+重编一遍只判警告」：
+
+- 覆盖 46 个带 `main` 的源文件（`src/t_*.c` 31 个单测 + `tools/*.c` 15 个工具）；`src/hdr_*.c`
+  是纯库，编成可执行会因缺 `main` 失败，不在射程内。
+- 首次审计 46 个里**只有 1 个有问题**：`tools/sweep_darkproxy.c:40` 的 `proxy_gap()` 定义了
+  从没被调用——候选 3 的公式早就内联进 `main`（`(gap > gaps[g]) != cpu`）。已删，留下注释说明
+  公式去哪了。
+- 负向验证：往 `src/t_hdr_head.c` 末尾塞一个没人调用的静态函数 ⇒
+  `::error::src/t_hdr_head.c：1 条 warning` + `‘unused_probe’ defined but not used [-Wunused-function]`，
+  审计红；删掉即绿。
