@@ -17,6 +17,27 @@
 
 也就是说：**装、跑、抓日志这三件都不缺工具**，`scripts/check_device_log.py`（13 项自测）随时可以判一份真机日志。
 
+## 一·五、诊断行不在 syslog 里，得读文件（本轮查清的）
+
+HDR stat 那行走 `s2a_log_line2` → `write(fd 2)`，而 runtime 的 `logfd_redirect()` 在上机时
+把 **fd 2 dup2 到 `<Documents>/host.log`**（`runtime/src/os.c` 的 `dup2(fd, 2)`）。所以：
+
+- `idevicesyslog` **抓不到**这些行（它读的是 syslog，不是文件）；
+- 取证要读 app 容器里的 `Documents/host.log`。
+
+两条拉取路径，2026-11-17 各实测过一次：
+
+| 路径 | 前提 | 实测结果 |
+| --- | --- | --- |
+| `ifuse --documents <bundle> <mnt>` | app 的 Info.plist 有 `UIFileSharingEnabled=true`（iOS 8.3 起强制） | Stardew Valley **挂载成功**（Documents 空）；scrcpy 报 `InstallationLookupFailed`，错误文案自己就说明了这个键 |
+| `ios tunnel start --userspace`（要 sudo）+ `ios file pull --app=… --remote=/Documents/host.log` | 开发签名的包（带 get-task-allow） | `--temp` 容器可列（`Total: 0 files`）⇒ 通道通；App Store 包被 `ContainerLookupErrorDomain:3` 挡 |
+
+`./scripts/fetch_device_log.sh <bundle-id>` 把这两条串起来（先 ifuse，再回退隧道），
+拿到之后直接 `./scripts/check_device_log.py --log <文件> --expect t1|t2|t3`。
+
+**给自己的包加一个键就能走路径 A**：`UIFileSharingEnabled=true`（开发包专用，玩家包里可以不加）。
+这比在 macOS 上配 tunnel + sudo 省事得多，也是当初 `host.log` 写到 Documents 的意义。
+
 ## 二、唯一缺的是「编出 ipa」
 
 本机是 Ubuntu，`clang 18.1.3` 能 `-target arm64-apple-ios`，但缺三样：

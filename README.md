@@ -40,6 +40,7 @@ SpecialK / BT.2087 / BT.2408-8 / Apple EDR / Microsoft scRGB，每条都写「�
 ```sh
 ./scripts/verify_upstream.sh     # 在上游当前头上从零验：打补丁 + 31 套 + MSL/常数 + 落点自检
 ./build/hdr_ref --synth hud --frames 8 --stat-line   # 打与设备日志同格式的一行（比对用）
+./scripts/fetch_device_log.sh <bundle-id>   # 从真机 app 容器拉 host.log（诊断行在这里，syslog 里没有）
 ./scripts/check_device_log.py --log <logcat> --expect t2   # 真机三格矩阵的判据（--selftest 自测）
 ./scripts/report_review.py           # docs/REVIEW.md：按这个顺序读（--check 挡漂移）
 ./scripts/report_fidelity.py         # docs/FIDELITY.md：真实照片上到底改了多少（纸白以下必须 0）
