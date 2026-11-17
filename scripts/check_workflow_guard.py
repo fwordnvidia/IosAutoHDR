@@ -18,6 +18,7 @@
 """
 import os
 import re
+import shutil
 import subprocess
 import sys
 
@@ -159,6 +160,26 @@ def main():
             problems.append("workflow 里没有出现 patch/BASELINE 的基线 %s（clone 会停在旧提交）" % base[:12])
         for s in sorted(shas - {base}):
             problems.append("workflow 里出现与 BASELINE 不一致的 sha %s" % s[:12])
+
+    # 12 条：有 actionlint 就再跑一遍。手写断言查不到「表达式上下文名拼错」「runner 标签不存在」
+    # 「needs 指向不存在的 job」这类问题，actionlint 专治这些（1.7.9 实测：macos-99 / needs: nonexistent /
+    # github.no_such_context / timeout "abc" 四处全报）。它是可选依赖，没装时明确说跳过，不静默。
+    al = shutil.which("actionlint")
+    wf = os.path.join(ROOT, ".github", "workflows", "verify.yml")
+    if al and os.path.exists(wf):
+        r = subprocess.run([al, "-shellcheck=", "-oneline", str(wf)],
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            for line in (r.stdout or r.stderr).strip().split("\n")[:6]:
+                msg = line.split(": ", 1)[-1]
+                if len(msg) > 180:   # runner-label 那条会把整张标签表倒出来，截断留诊断要点
+                    msg = msg[:180] + " …（标签表已截断）"
+                problems.append("actionlint 报：%s" % msg)
+        else:
+            print("· actionlint %s：无告警" % subprocess.run([al, "--version"], capture_output=True,
+                                                             text=True).stdout.split()[0])
+    else:
+        print("· 未装 actionlint —— 这一层跳过（brew install actionlint，或下 release 的静态二进制放 PATH）")
 
     if problems:
         for p in problems:

@@ -327,4 +327,6 @@ python3 scripts/report.py     # 改完算法后重新生成
 现在：
 `concurrency` 保证同一 ref 只跑一个、`timeout-minutes: 20` 兜底、`scripts/check_workflow_guard.py`
 把「不许出现 push/PR/schedule 触发、不许出现 xcodebuild、写死的基线必须等于 `patch/BASELINE`」
-做成闸门（`0w15/5`）。手动跑一次约 10 分钟，公开仓库不消耗配额。
+做成闸门（`0w15/5`）。装了 `actionlint` 时这一关还会再让它跑一遍——手写断言查不出的
+「表达式上下文名拼错 / runner 标签不存在 / `needs` 指向不存在的 job」它专治（没装则明确打印跳过）。
+手动跑一次约 10 分钟，公开仓库不消耗配额。
