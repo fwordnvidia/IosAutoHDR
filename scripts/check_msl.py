@@ -13,6 +13,7 @@
 
 验的是「抽出来的 MSL 文本」，也就是真正送进编译器的东西（`extract_msl.py` 的产物）。
 """
+import codecs
 import os
 import re
 import subprocess
@@ -31,11 +32,41 @@ BANNED = [
 
 
 def extract():
-    """复用 extract_msl.py 抽出的 .metal；没有就先跑一次。"""
+    """复用 extract_msl.py 抽出的 .metal；没有就先跑一次。
+
+    2026-11-17 补：`src/nvn_present_fi.inc` 里还有两段 MSL（`fi_mv_setup` 的运动估计
+    down/match/spread，与 `fi_copy_setup` 的缩拷 vs/fs），它们一直**不在**这个守卫里 ——
+    而 to_enc（HDR 线性→编码域）恰恰是那段里最容易写错的东西。按出现序号各写一个文件。
+    """
     script = os.path.join(HERE, "scripts", "extract_msl.py")
     os.makedirs(TMP, exist_ok=True)
     subprocess.run([sys.executable, script, os.path.join(HERE, "src", "nvn_mtl.m"), "--dir", TMP],
                    check=True, capture_output=True)
+
+    inc = os.path.join(HERE, "src", "nvn_present_fi.inc")
+    if os.path.exists(inc):
+        with open(inc, encoding="utf-8", errors="replace") as f:
+            lines = f.read().split("\n")
+        lits = re.compile(r'"((?:[^"\\]|\\.)*)"')
+        idx, cur, out = 0, None, []
+        for ln in lines:
+            if "static const char *msl =" in ln:
+                idx += 1
+                cur = []
+                out.append(cur)
+                continue
+            if cur is None:
+                continue
+            for m in lits.finditer(ln):
+                cur.append(codecs.decode(m.group(1), "unicode_escape"))
+            if ln.rstrip().endswith(";") and cur:
+                cur = None
+        for i, chunk in enumerate(out, 1):
+            body = "".join(chunk)
+            if body.strip():
+                with open(os.path.join(TMP, "fi_msl_%d.metal" % i), "w", encoding="utf-8") as f:
+                    f.write(body)
+
     return sorted(f for f in os.listdir(TMP) if f.endswith(".metal"))
 
 

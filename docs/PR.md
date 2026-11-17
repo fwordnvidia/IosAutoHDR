@@ -296,7 +296,7 @@ S2A_HDR_FMT=0`，8 位 + 声明 EDR）与上游截图对比来验——这也是
 1. **MSL 只做过语法级验证**：本机无 Metal 编译器。通过 `xcrun metal -std=metal3.0 -c` 的是
    `hdr_hist.metal` 与 8 位直通上屏 shader（CI run `43729862796`）；**当前的 3555 B HDR fragment
    shader 与 16F 上屏路径从未过 Apple 编译器**（GitHub 账号停用后 CI 不可触发）。静态守卫
-   `scripts/check_msl.py` 42 项只查禁用类型、括号配平、属性重复这类结构问题；
+   `scripts/check_msl.py` 72 项（4 个 MSL 文件）只查禁用类型、括号配平、属性重复这类结构问题；
 2. **ObjC 只做过 `clang -fsyntax-only`**（对 `nvn_mtl.m` / `host_adapt.m`，无链接、无运行）；
 3. 真机三格矩阵尚未跑：T1 `S2A_HDR_FMT=1`（只换格式）、T2 `S2A_HDR_OUTPUT=1`（总开关；`FMT=1` 可叠加）、T3 `FMT=0`（只开 EDR）——组合语义在 `s2a_hdr_out_plan`，单测 `t_hdr_env` 37 项；
    判据已脚本化为 `./scripts/check_device_log.py --log <logcat> --expect t1|t2|t3`——它认的是

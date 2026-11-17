@@ -28,6 +28,12 @@ STAT_RE = re.compile(
 # map 字段是后加的：旧日志没有它，按 0（拐点档）理解，不能因为「没这个字段」就判整行无效。
 FALLBACK_RE = re.compile(r"16F 画布连续 \d+ 帧取不到 drawable")
 REARM_RE = re.compile(r"重新试探 16F 画布")
+# 真机上 MSL 是运行时从源码编译的（newLibraryWithSource:），所以「xcrun metal 能抓的错」
+# 在设备上表现为 program_source 报错行。没有这条判据时，这类失败只会表现为
+# 「HDR stat 一行都没有」，被误读成「开关没开」。
+MSL_ERR_RE = re.compile(r"program_source:\d+:\d+: (?:fatal )?error:|"
+                        r"(?:metal_stdlib|metal_texture) (?:file )?not found|"
+                        r"Compilation failed: .*\.metal")
 
 
 def parse(text):
@@ -52,6 +58,7 @@ def parse(text):
         "stats": st,
         "fallback": len(FALLBACK_RE.findall(text)),
         "rearm": len(REARM_RE.findall(text)),
+        "msl_err": len(MSL_ERR_RE.findall(text)),
     }
 
 
@@ -59,6 +66,9 @@ def common_checks(parsed):
     """与具体哪一格无关的一致性检查：返回 (失败项, 备注列表)。"""
     bad, notes = [], []
     st = parsed["stats"]
+    if parsed["msl_err"]:
+        bad.append("真机日志里有 %d 行 Metal 运行时编译错误（program_source 报错）"
+                   "——这说明 MSL 在设备上编不过；这类错本可以在 macOS 上先用 xcrun metal 抓掉" % parsed["msl_err"])
     if not st:
         # 一行都没有：要么没开 S2A_HDR_LOG，要么 16F 从没跑起来（后者由 expect 判）
         notes.append("日志里没有 HDR stat 行")
@@ -136,6 +146,11 @@ SELFTEST_CASES = {
     # 内容映射档：map=1、fmt=16F、itm=1 是合法组合（knee 仍在算，只是没用于上屏）
     "map1_ok": ("HDR stat: fmt=16F head=2.00 knee=0.3400+0.6600 white=0.7900 avg=-1.20 scene=0.00 frozen=0 itm=1 map=1", "t2", True),
     # 内容映射落在 8 位画布上：走不到 HDR fragment，说明开关接了但管线没换
+    # MSL 在真机上编不过：只有 program_source 报错、没有 stat 行 —— 必须判红，不能当成「没开日志」
+    "msl_fail": ("E nvn: program_source:41:9: error: use of undeclared identifier 'to_enc'\n"
+                 "E nvn: Compilation failed: /tmp/src_msl_hdr.metal", None, False),
+    "msl_fail_with_stat": ("program_source:41:9: error: no matching function for call to 'select'\n"
+                           "HDR stat: fmt=16F head=2.00 knee=0.3400+0.6600 white=0.7900 avg=-1.20 scene=0.00 frozen=0 itm=1", "t2", False),
     "map1_8b": ("HDR stat: fmt=8B head=1.00 knee=0.3400+0.6600 white=0.7900 avg=-1.20 scene=0.00 frozen=0 itm=0 map=1", "t3", False),
 }
 

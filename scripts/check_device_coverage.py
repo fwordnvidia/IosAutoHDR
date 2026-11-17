@@ -138,7 +138,7 @@ def main():
     lines.append("- 上游自己的 kernel/fragment（`ms`、`ixc_*`、`wide_u8`、`mdx_mask`、`cp`、`dt_fs` 等）不在本表："
                  "它们不是我们加的，改动只经由补丁的上下文，`check_landing.py` 负责断言我们没动到它们。")
     lines.append("- 类型正确性（`float` vs `half`、buffer 对齐、attribute 序号）不在对账范围："
-                 "`check_msl.py` 42 项做静态检查，其余交给真机（未执行）。")
+                 "`check_msl.py` 72 项做静态检查，其余交给真机（未执行）。")
     out = os.path.join(ROOT, "docs/DEVICE-ONLY.md")
     text = "\n".join(lines) + "\n"
 

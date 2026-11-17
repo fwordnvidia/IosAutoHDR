@@ -75,6 +75,6 @@ Ubuntu 上无论跑多少次都跑不出来。跑一次约 10 分钟，公开仓
 - 上游 `jhaizhou-ops/S2Arm` 是 Apache-2.0；本仓库保留其 `LICENSE` 原文与 `NOTICE` 署名。
 - 补丁对**一个特定上游提交**验证过（见 `patch/BASELINE`）。上游前进后需要重放，流程见
   `docs/PR.md` 的「基线迁移」。
- - 设备端行为没有任何承诺：MSL 在本机只做静态核对（42 项守卫），真编译要靠上面那个手动
+ - 设备端行为没有任何承诺：MSL 在本机只做静态核对（72 项 / 4 个 MSL 文件），真编译要靠上面那个手动
   workflow 跑一次（约 10 分钟，需 token 有 `workflow` scope 才能推上去）；ObjC 在 macOS 上做
   `-fsyntax-only`，**没有链接、也没有在真机跑过**。

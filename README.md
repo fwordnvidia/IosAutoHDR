@@ -172,7 +172,7 @@ vim src/nvn_hdr.h              # src/ 是唯一真相源
 | 带阶 | ✅ 实测：中间调台阶放大 **1.000×**，最坏 **3.35×**（高白点时 6.6×）；16F 相对余量 96×，**不需要输出抖动** |
 | 时间稳定性 | ✅ 实测：噪声 1%→20% 下 knee 逐帧变化 **0.00%**（量化+smoothing 足够，不需迟滞）；噪声越重白点上移越多（20% 时 +0.55 stop） |
 | 色域 / 饱和度 | ✅ `S2A_HDR_P3`（BT.2087 sRGB→P3，按行归一化保证灰恒定）与 `S2A_HDR_SAT`（保亮度）；两级都带恒等短路，缺省逐位等同没有这两个旋钮 |
-| MSL 编译 | ⚠️ **只编过两处**：`hdr_hist.metal`（run 43727751120，去 `double` 后 `air: 8736 B`）与 8 位直通上屏 shader。**HDR fragment（3555 B）与 16F 上屏路径从未过 `xcrun metal`**（GitHub 账号停用后 CI 不可触发），本地只有 `scripts/check_msl.py` 42 项结构守卫 |
+| MSL 编译 | ⚠️ **只编过两处**：`hdr_hist.metal`（run 43727751120，去 `double` 后 `air: 8736 B`）与 8 位直通上屏 shader。**HDR fragment（3555 B）与 16F 上屏路径从未过 `xcrun metal`**（GitHub 账号停用后 CI 不可触发），本地只有 `scripts/check_msl.py` 72 项结构守卫（4 个 MSL 文件）——2026-11-17 起把 `nvn_present_fi.inc` 里补帧的两段（`fi_mv_setup` 的 down/match/spread 与 `fi_copy_setup` 的缩拷）也纳进来了：它们此前既不进静态守卫、也不进真编译 |
 | ObjC 编译 | ✅ `hdr-check` 第 6 步：生成 gen 头后用 `clang -fsyntax-only -fobjc-arc -arch arm64 -isysroot iphoneos` 编 `nvn_mtl.m`（16k 行）与 `host_adapt.m`，两者 **rc=0**（run 43728394548）。这是语法/类型级验证，不是链接与整包构建 |
 | 与 0.4.0 补帧共存 | ✅ 补帧链四处格式参数化（含 `fi_commit` 的 `present_pipeline`），MetalFX 不收 16F 时退回 8 位并告警（run 43729167355 语法闸门 rc=0） |
 | 16F 下 AA / MetalFX 放大 | ⬜ 内部图仍是 8 位，当前跳过并打黄字 |
