@@ -146,6 +146,9 @@ python3 scripts/report_fi_domain.py --check || fail=1
 step "0w14/5 补丁统计三处一致（文件数 / ±行数 / sha256 必须与补丁本体现算一致）"
 python3 scripts/check_patch_stats.py --check || fail=1
 
+step "0w15/5 CI workflow 只手动跑（无 push/PR 触发、有 concurrency、timeout ≤20 分钟、基线不漂移）"
+python3 scripts/check_workflow_guard.py || fail=1
+
 step "0w3/5 文档计数（套数 / 断言总数 / 上屏 fragment 字节数 必须与实测一致）"
 python3 scripts/check_counts.py || fail=1
 

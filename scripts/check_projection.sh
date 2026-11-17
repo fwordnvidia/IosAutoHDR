@@ -13,10 +13,21 @@ say() { printf '%s\n' "$*"; }
 bad() { printf '  ✗ %s\n' "$*"; fail=$((fail+1)); }
 ok()  { printf '  ✓ %s\n' "$*"; }
 
-say "1) 不含任何 GitHub Actions 配置（物理上不可能起 runner）"
-if [ -e .github ]; then bad ".github/ 存在"; else ok "无 .github/"; fi
+say "1) CI 配置只有一个只手动触发的 workflow（没有任何自动触发入口）"
+# 2026-11-17 改口径：workflow 现在保留在源码树里（只接受 workflow_dispatch），
+# 但**默认不进投影** —— 推它需要 PAT 有 `workflow` scope，不为一个 CI 文件去扩权。
+# 所以这里两种形态都合法：没有 .github（默认）；有则必须只有那一个手动 workflow。
+if [ -e .github ]; then
+    extra=$(find .github -type f ! -path '.github/workflows/verify.yml' | head -5)
+    if [ -z "$extra" ]; then ok ".github/ 只有 workflows/verify.yml（只手动触发，见第 9 组）"
+    else bad ".github/ 里有多余文件：$(echo $extra | tr '\n' ' ')"; fi
+else
+    ok "投影未带 .github/（默认形态：不为推 CI 文件去扩 token 权限）"
+fi
 n=$(find . -path ./.git -prune -o -name '*.yml' -print -o -name '*.yaml' -print 2>/dev/null | wc -l)
-[ "$n" -eq 0 ] && ok "无任何 .yml/.yaml" || bad "有 $n 个 yml/yaml，请确认不是 workflow"
+if [ "$n" -eq 0 ]; then ok "无 .yml/.yaml（未带 workflow）"
+elif [ "$n" -eq 1 ]; then ok "只有 1 个 .yml（那个手动 workflow）"
+else bad "有 $n 个 yml/yaml，预期 0 或 1"; fi
 
 say "2) 不含上游整文件（只交付补丁与自写代码）"
 before=$fail
@@ -56,6 +67,19 @@ say "8) 根级入口脚本存在（README 的接收步骤要真能照做）"
 for f in run_all.sh verify.sh; do
     if [ -f "$f" ] && [ -x "$f" ]; then ok "$f 存在且可执行"; else bad "缺 $f（README 让使用者敲它，投影里却没有）"; fi
 done
+
+say "9) 投影里的 CI 只手动跑（在 github.com 上按一下就是一台 macOS 虚机）"
+# 起因：旧号 Kippythisway 的 workflow 带 push 触发 + 并发无上限，一天 114 台 macOS 虚机被停用。
+# 这里直接复用仓库内的守卫脚本，投影要是被改回自动触发，这组就红。
+if [ -f .github/workflows/verify.yml ]; then
+    if python3 scripts/check_workflow_guard.py >/tmp/proj_wf.log 2>&1; then
+        ok "workflow 仅 workflow_dispatch 触发（timeout / concurrency / 基线由同一守卫核对）"
+    else
+        bad "workflow 不再是「只手动跑」：$(grep -m1 '::error::' /tmp/proj_wf.log | sed 's/::error::workflow 守卫：//')"
+    fi
+else
+    ok "投影未带 workflow（SYNC_CI=1 同步后本组就会校验它只手动跑）"
+fi
 
 say ""
 if [ "$fail" -eq 0 ]; then say "✓ 公开投影自检通过：仓库性质与 README 声称一致"; exit 0; fi

@@ -36,6 +36,20 @@ cp "$ROOT/README.md" "$DST/README.md"
 # 照文档做的人第一步就 command not found。2026-11-17 消费端测试发现（tar 包里有，投影里没有）。
 cp "$ROOT/run_all.sh" "$ROOT/verify.sh" "$DST/" || exit 1
 
+# CI 配置默认**不**进投影。原因不在合规（那个 workflow 只接受 workflow_dispatch），
+# 而在凭据：GitHub 拒绝用没有 `workflow` scope 的 PAT 创建/改写 workflow 文件，
+# 报 “refusing to allow a Personal Access Token to create or update workflow … without
+# `workflow` scope”。为了不为了一个 CI 文件去扩权，默认路径保持「投影里没有 workflow」；
+# 真要在 GitHub 上点 Run 时，先给 token 加上 `Workflows: Read and write`，再：
+#   SYNC_CI=1 ./scripts/sync_release.sh <投影目录>
+if [ "${SYNC_CI:-0}" = "1" ]; then
+    mkdir -p "$DST/.github/workflows"
+    cp "$ROOT/.github/workflows/verify.yml" "$DST/.github/workflows/verify.yml" || exit 1
+    echo "· 已同步 workflow（SYNC_CI=1）"
+else
+    rm -rf "$DST/.github"
+fi
+
 # 清掉「曾经误拷进去的上游整文件」，否则自检红
 for bad in nvn_mtl.m host_adapt.m nvn_present_fi.inc galaxy_ng.m; do rm -f "$DST/src/$bad"; done
 

@@ -94,7 +94,7 @@ SpecialK / BT.2087 / BT.2408-8 / Apple EDR / Microsoft scRGB，每条都写「�
 ## 合规（可验证，不是承诺）
 
 这个仓库是**公开投影**：只有补丁、自写源码、文档、工具、脚本，加上上游的 `LICENSE`/`NOTICE`。
-不含上游整文件、不含构建产物、**不含 ` .github/`（因此物理上无法触发任何 runner）**。
+不含上游整文件、不含构建产物。**没有任何自动触发的 CI**：源码树里的 `.github/workflows/verify.yml` 只接受 `workflow_dispatch`，而且默认**不同步进投影**（推它要求 PAT 带 `workflow` scope，不为一个 CI 文件去扩权；需要时用 `SYNC_CI=1 ./scripts/sync_release.sh`）。改回自动触发会让 `./run_all.sh` 在 `0w15/5` 变红。
 逐条纪律与实名事故复盘见 [docs/GITHUB-COMPLIANCE.md](docs/GITHUB-COMPLIANCE.md)，自检：`./scripts/check_projection.sh`。
 
 维护者把工作树同步到投影时不该手抄（会漏、会多）：
@@ -315,5 +315,14 @@ python3 scripts/report.py     # 改完算法后重新生成
 本目录是 S2Arm（Apache-2.0）的**补丁与独立参考实现**，不含上游源码：`patch/hdr-auto-l1.patch`
 打在上游 `d5cbf7ff53f7` 的干净树上。见 [LICENSE](LICENSE) 与 [NOTICE](NOTICE)。
 
-`.github/workflows/verify.yml` 是包内 CI：clone 上游 → 打补丁 → 跑全部闸门 + MSL/ObjC 真编译，
-推上 GitHub 或 fork 后可手动触发。
+`.github/workflows/verify.yml` 是包内 CI：clone 上游干净树 → 跑全部闸门 → 再打补丁做
+**MSL 真编译 + 常数对账 + ObjC 语法检查**（本机 Ubuntu 做不到的三件事）。
+
+它**只能手动触发**（`workflow_dispatch`），因为 2026-11-17 之前的 GitHub 号
+`Kippythisway` 带 push 触发、并发又没上限，一天起了 114 台 macOS 虚机被停用。
+默认它不随投影同步（GitHub 拒绝用没有 `workflow` scope 的 PAT 创建 workflow 文件）；
+要给 token 加上 `Workflows: Read and write` 之后用 `SYNC_CI=1 ./scripts/sync_release.sh <投影>` 带上。
+现在：
+`concurrency` 保证同一 ref 只跑一个、`timeout-minutes: 20` 兜底、`scripts/check_workflow_guard.py`
+把「不许出现 push/PR/schedule 触发、不许出现 xcodebuild、写死的基线必须等于 `patch/BASELINE`」
+做成闸门（`0w15/5`）。手动跑一次约 10 分钟，公开仓库不消耗配额。
