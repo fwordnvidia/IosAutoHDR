@@ -24,7 +24,11 @@ concurrency、timeout ≤20 分钟、不许 matrix / `secrets.` / `xcodebuild`�
 `4c/5` 符号对账（补丁触及的 41 个 C 系文件里，每个 `s2a_*` / `nvn_hdr_*` / `hdr_*` 标识符
 都必须能在树里的定义位置、或被改文件的 `HEAD` 版本里找到声明；这是 Linux 侧对
 「从不编译的 ObjC / MSL」最接近链接的检查——`nvn_mtl.m` 的四处手工合并与
-`nvn_hdr_hist.inc` 整块设备代码，拼错一个字母在这里才会红）
+`nvn_hdr_hist.inc` 整块设备代码，拼错一个字母在这里才会红） →
+`4d/5` MSL 符号对账（`4c/5` 剥字符串时把 MSL 源码整个剥掉了，所以着色器那一层要单独核：
+`nvn_mtl.m` 的 `src_msl` / `src_msl_hdr`、`nvn_present_fi.inc` 的两段、`hdr_hist.metal`
+里的 `s2a_*` / `nvn_hdr_*` / `hdr_*` / `to_*` 标识符，每个都必须在这些 MSL 源码的定义位置
+出现过——3555 B 的 HDR fragment 从未过 `xcrun metal`，`to_enc`→`to_encd` 这种错只有这里能红）
 
 它不做的事：
 编译 MSL、编译 ObjC、链接、真机——见文末。
