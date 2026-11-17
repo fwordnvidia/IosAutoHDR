@@ -21,11 +21,17 @@ concurrency、timeout ≤20 分钟、不许 matrix / `secrets.` / `xcodebuild`�
 `0w18/5` Python lint（34 个脚本过 ruff E9/F/B905，`zip` 必须写 `strict=`）→
 `0w19/5` 社区文件结构（`.github/ISSUE_TEMPLATE/*.yml` 的 type/id/attributes/validations 逐项核；
 GitHub 对写错的表单是**静默忽略**——仓库页上不出现，本地却干干净净）→
-`0w20/5` HDR 钩子不变量（6 条结构断言：图层指针每帧都记、两个 present 入口都调 `hdr_head_tick()`、
+`0w20/5` HDR 钩子不变量（7 条结构断言：图层指针每帧都记、两个 present 入口都调 `hdr_head_tick()`、
 显式 `S2A_HDR_HEADROOM` 让位、取不到 drawable 的块里降级与回头路成对、降级块同时改像素格式与
 颜色空间、回头路块把 16F/EDR/扩展线性 sRGB 三件装回；这些行在 Linux 侧**从不编译**，
 写错了是全绿——真实案例：`g_present_layer_resident = layer;` 和 residencySet 加挂挤在同一个
-`if (!g_m3 && …)` 里，Metal 3（iOS 26.x、非 Metal 4 GPU、系统 <26）永远进不去 ⇒ EDR 上界跟随静默失效）→
+`if (!g_m3 && …)` 里，Metal 3（iOS 26.x、非 Metal 4 GPU、系统 <26）永远进不去 ⇒ EDR 上界跟随静默失效；
+第 7 条要求 tick 里保留「EDR 上界跟随已启用」这行**正面**日志 —— 修一个静默失效，必须同时留下
+可 grep 的正面信号，否则下一轮只能靠重读代码）→
+`0w21/5` CI 结果判读（`scripts/check_ci_result.py --selftest`，6 项合成样本；判据 R1–R7 认七种
+「绿了个寂寞」：macOS 那步 `skipped`、某个 MSL 没编、日志其实是 `rehearse_ci.py` 的预演、
+补丁指纹对不上、run_all 没绿……这一条是给 `.github/workflows/verify.yml` 准备的：本机跑不了它，
+所以才更需要一套能判它「真编过没有」的标尺）→
 `4b/5` 换格式后上游隐含假设（13 条结构断言 + `docs/UPSTREAM-ASSUMPTIONS.md`；**必须排在
 4/5 打补丁之后**——它核的是打完补丁的树，曾经排在前面导致带树根跑 6 条假红）→
 `4c/5` 符号对账（补丁触及的 41 个 C 系文件里，每个 `s2a_*` / `nvn_hdr_*` / `hdr_*` 标识符

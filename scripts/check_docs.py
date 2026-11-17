@@ -29,7 +29,7 @@ for r in sorted(refs):
 # 仓库级脚本（mirror_vultr.sh、check_repo_hygiene.sh）住在完整工作树的 scripts/，不进投影，不在本表。
 ENTRY = ['rebase_patch.sh', 'verify_upstream.sh', 'baseline_report.sh', 'make_patch.sh',
          'sanitize.sh', 'check_projection.sh', 'publish.sh', 'sync_release.sh', 'check_callsites.py', 'check_device_coverage.py', 'report_fi_domain.py', 'check_format_assumptions.py',
-         'check_issue_form.py', 'check_hdr_hooks.py',
+         'check_issue_form.py', 'check_hdr_hooks.py', 'check_ci_result.py',
     'check_patch_symbols.py', 'check_msl_symbols.py', 'check_patch_fresh.py', 'check_patch_tools.sh', 'check_github.sh',
          'check_device_log.py', 'check_msl.py', 'fetch_device_log.sh', 'check_shell_helpers.py', 'check_c_warnings.sh', 'check_py_lint.sh', 'rehearse_ci.py']
 for e in ENTRY:
@@ -112,6 +112,10 @@ else:
     _self_cases = int(_m.group(1))
 for _md in [ROOT / 'README.md'] + sorted((ROOT / 'docs').glob('*.md')):
     for _i, _line in enumerate(_md.read_text(encoding='utf-8').split('\n'), 1):
+        # 只在「说的是 check_device_log」的行上认这个数字：别的脚本也有 --selftest（判据项数不同），
+        # 一律按 device_log 的项数去要求它，会逼着人写模糊话。
+        if 'check_device_log' not in _line:
+            continue
         for _m in re.finditer(r'(\d+)\s*项(?:合成日志)?自测|--selftest[^0-9\n]{0,16}(\d+)\s*项', _line):
             _n = int(_m.group(1) or _m.group(2))
             if _n != _self_cases:

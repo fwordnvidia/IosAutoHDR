@@ -196,6 +196,9 @@ python3 scripts/check_issue_form.py || fail=1
 step "0w20/5 HDR 钩子不变量（图层每帧记 / 两处 tick / 显式 headroom 让位 / 降级与回头路成对）"
 python3 scripts/check_hdr_hooks.py || fail=1
 
+step "0w21/5 CI 结果判读（CI 绿了但 macOS 那步被跳过，也是绿：判据要认得出）"
+python3 scripts/check_ci_result.py --selftest || fail=1
+
 step "0w3/5 文档计数（套数 / 断言总数 / 上屏 fragment 字节数 必须与实测一致）"
 python3 scripts/check_counts.py || fail=1
 
