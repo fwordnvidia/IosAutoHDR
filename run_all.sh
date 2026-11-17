@@ -259,9 +259,14 @@ if [ $# -ge 1 ]; then
     # 我们插入的行。那不是代码坏了，是跑法错了（2026-11-17 消费端测试首次撞到）。
     step "4b/5 格式假设（对着刚打完补丁的树核 13 条 + docs/UPSTREAM-ASSUMPTIONS.md）"
     python3 scripts/check_format_assumptions.py "$1" --check || fail=1
+    # ObjC 与 MSL 在 Linux 侧从不编译：`nvn_mtl.m` 的四处手工合并、`nvn_hdr_hist.inc`
+    # 整块设备代码，拼错一个字母在这里不会红，只会在 macOS CI 或真机上炸。
+    # 这里做最接近链接的检查：补丁改过的文件里每个前缀符号都得有定义（或上游声明过）。
+    step "4c/5 符号对账（补丁改过的 ObjC/MSL 里每个前缀符号都得有定义）"
+    python3 scripts/check_patch_symbols.py "$1" || fail=1
 else
     echo "  跳过（没给树根）；CI 里由 verify.yml 完成这一步"
-    echo "  （0w13/5 格式假设也要树根，一并跳过：它要对着打补丁后的源码核）"
+    echo "  （4b/5 格式假设、4c/5 符号对账也要树根，一并跳过：它们要对着打补丁后的源码核）"
 fi
 
 step "5/5 结论"

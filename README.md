@@ -49,6 +49,7 @@ SpecialK / BT.2087 / BT.2408-8 / Apple EDR / Microsoft scRGB，每条都写「�
 ./scripts/check_shell_helpers.py    # 脚本里调用的 ok/bad/step 必须有定义（`ok: not found` 不会置 fail）
 ./scripts/check_c_warnings.sh        # 46 个源文件用 -Wall -Wextra 重编（正式构建的 -w 会遮住全部警告）
 ./scripts/check_py_lint.sh           # 34 个 Python 脚本过 ruff（E9/F/B905；需 Python ≥ 3.10）
+./scripts/check_patch_symbols.py <树>   # 补丁改过的 ObjC/MSL 里每个前缀符号都得有定义（Linux 侧从不编译它们）
 ./scripts/check_upstream.sh      # 上游默认分支/tag 各在哪、补丁还能不能干净打上、是否纯增量
 ./scripts/check_upstream.sh --full  # 同上，再就地打上并跑完整闸门（2.5 分钟，这才是"行为没变"的证据）
 ./scripts/rehearse_ci.py         # 把 verify.yml 的 run: 块在 Linux 上真跑一遍（挖掉 macOS 专属行）

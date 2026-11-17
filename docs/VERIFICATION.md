@@ -20,7 +20,11 @@ concurrency、timeout ≤20 分钟、不许 matrix / `secrets.` / `xcodebuild`�
 `0w17/5` C 警告（46 个带 main 的文件用 `-Wall -Wextra` 重编，正式构建的 `-w` 会遮住全部警告）→
 `0w18/5` Python lint（34 个脚本过 ruff E9/F/B905，`zip` 必须写 `strict=`）→
 `4b/5` 换格式后上游隐含假设（13 条结构断言 + `docs/UPSTREAM-ASSUMPTIONS.md`；**必须排在
-4/5 打补丁之后**——它核的是打完补丁的树，曾经排在前面导致带树根跑 6 条假红）
+4/5 打补丁之后**——它核的是打完补丁的树，曾经排在前面导致带树根跑 6 条假红）→
+`4c/5` 符号对账（补丁触及的 41 个 C 系文件里，每个 `s2a_*` / `nvn_hdr_*` / `hdr_*` 标识符
+都必须能在树里的定义位置、或被改文件的 `HEAD` 版本里找到声明；这是 Linux 侧对
+「从不编译的 ObjC / MSL」最接近链接的检查——`nvn_mtl.m` 的四处手工合并与
+`nvn_hdr_hist.inc` 整块设备代码，拼错一个字母在这里才会红）
 
 它不做的事：
 编译 MSL、编译 ObjC、链接、真机——见文末。
