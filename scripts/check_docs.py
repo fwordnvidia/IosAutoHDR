@@ -136,6 +136,30 @@ for _rel, _mdname in sorted(_exec_refs.items()):
     if not os.access(ROOT / _rel, os.X_OK):
         fails.append(f'{_mdname} 让你敲 ./{_rel}，但它没有可执行位（chmod +x {_rel}）')
 
+# 10) 文档里写「文件:行号 符号()」时，那个符号必须真在那一行附近。
+#     踩过的实例：docs/PR.md 写 `nvn_mtl.m:16311 hdr_head_tick()`，而 `hdr_head_tick()`
+#     在两个版本里挪到了 17631 —— 行号是当初写文档时抄的，之后代码长了 1300 行没人回头改。
+#     审阅者点过去看到的是无关代码，而这类引用恰恰是「文档里最像证据的东西」。
+#     容差 ±10 行（插入/删除几行注释不该判红）；找不到该文件时打印跳过，不猜。
+_MISS = 10
+for _md in [ROOT / 'README.md'] + sorted((ROOT / 'docs').glob('*.md')):
+    _text = _md.read_text(encoding='utf-8')
+    for _i, _line in enumerate(_text.split('\n'), 1):
+        for _m in re.finditer(r'([A-Za-z0-9_./\-]+\.(?:m|h|c|inc|metal|py|sh)):(\d+)\s+([A-Za-z_]\w*)\(\)', _line):
+            _rel, _ln, _sym = _m.group(1), int(_m.group(2)), _m.group(3)
+            _cand = [ROOT / _rel] + [p for p in ROOT.rglob(_rel.split('/')[-1]) if p.is_file()]
+            _hit = next((p for p in _cand if p.is_file()), None)
+            if _hit is None:
+                print(f'  · {_md.name}:{_i} 引用了 {_rel}，本树里没有（投影形态只有补丁）⇒ 跳过行号核对')
+                continue
+            _lines = _hit.read_text(encoding='utf-8', errors='replace').split('\n')
+            _lo, _hi = max(1, _ln - _MISS), min(len(_lines), _ln + _MISS)
+            if not any(re.search(r'\b%s\s*\(' % re.escape(_sym), _lines[k - 1]) for k in range(_lo, _hi + 1)):
+                _real = [k for k, t in enumerate(_lines, 1) if re.search(r'\b%s\s*\(' % re.escape(_sym), t)]
+                _tip = f'；它现在在 {_rel}:{_real[0]}' if _real else '；整份文件里也没找到这个符号'
+                fails.append(f'{_md.name}:{_i} 写 {_rel}:{_ln} {_sym}()，但那附近没有它'
+                             f'（文件共 {len(_lines)} 行）{_tip}')
+
 if fails:
     for f in fails:
         print(f'::error::{f}')

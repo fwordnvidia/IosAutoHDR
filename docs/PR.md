@@ -44,7 +44,7 @@ NS2 的《S2Arm》把主机画面直接 blit 到 layer，`host_adapt.m` 里写�
 | `nvn_hdr_hist.inc` | 每帧编码 + blit 回读 + 平滑（帧率归一化、白点死区、场景切换检测） |
 | `nvn_mtl.m` | 16F 上屏管线、`HdrCrop{rect,edge,knee,extra}` 16 float 常量、knee/head 接通 |
 | `nvn_hdr.h` 的 `s2a_hdr_status_line()` | `S2A_HDR_LOG=1` 时的诊断行（600 帧一行，字段与小数位固定，供真机远程判读） |
-| `host_adapt.m` | layer 改 `RGBA16Float` + `wantsExtendedDynamicRangeContent`（EDR 上界运行期由 `nvn_mtl.m:16311 hdr_head_tick()` 每帧读 layer 的 `maximumExtendedDynamicRangeColorComponent`，host 不重复读数） |
+| `host_adapt.m` | layer 改 `RGBA16Float` + `wantsExtendedDynamicRangeContent`（EDR 上界运行期由 `nvn_mtl.m:17631 hdr_head_tick()` 每帧读 layer 的 `maximumExtendedDynamicRangeColorComponent`，host 不重复读数） |
 | `nvn_present_fi.inc` | MetalFX 补帧链的四处 8 位硬编码参数化（HDR 下补帧不再破坏格式） |
 
 缺省**全关**（`S2A_HDR_FMT` / `S2A_HDR_OUTPUT` 都未设时行为与上游一致），
