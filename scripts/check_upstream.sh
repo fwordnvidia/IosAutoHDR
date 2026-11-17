@@ -63,12 +63,20 @@ if git -C "$dir" apply --check "$ROOT/patch/hdr-auto-l1.patch" 2>/dev/null; then
     # 上游改了同一文件的别的函数时它照样通过，真正要验的是行为。2026-11-17 就是这么发现
     # 上游 b66dc564 改了 nvn_mtl.m +75 行、而补丁仍全绿（149 项）的。
     if [ "$FULL" = "1" ]; then
-        echo "· --full：就地打上并跑完整闸门（要几分钟）"
-        git -C "$dir" apply --whitespace=nowarn "$ROOT/patch/hdr-auto-l1.patch"
-        if "$ROOT/run_all.sh" "$dir" 2>&1 | tail -12; then
-            echo "✓ 补丁打在 $ref ($(echo "$head" | cut -c1-12)) 上，完整闸门全过"
+        # 两件事都别做错：
+        #   1) **不要**先在这里 apply 一次再交给 run_all —— run_all 的 4/5 步骤自己在干净树上
+        #      打补丁，预打一遍会让它撞 "patch does not apply"。让 run_all 独占这件事。
+        #   2) **不要**用 `run_all.sh | tail` 取结果 —— `if cmd | tail` 判的是 tail 的退出码，
+        #      恒为 0 ⇒ 闸门红成一片也会打「✓ 全过」。同一个坑今天已经是第三次（MSL 守卫、
+        #      report_review 那两处也是管道吞退出码）。先落日志再 tail。
+        echo "· --full：交给 ./run_all.sh 自己打补丁并跑完整闸门（要几分钟）"
+        if "$ROOT/run_all.sh" "$dir" >/tmp/upstream_full.log 2>&1; then
+            grep -E '^  ✓' /tmp/upstream_full.log | tail -3
+            echo "✓ 补丁打在 $ref ($(echo "$head" | cut -c1-12)) 上，完整闸门全过（$(grep -cE '^  ✓' /tmp/upstream_full.log) 个 ✓）"
         else
-            echo "✗ 补丁能 apply，但在 $ref 上闸门有红项 —— 看上面最后几行"
+            echo "✗ 补丁能 apply，但在 $ref 上闸门有红项："
+            grep -E '::error::|✗' /tmp/upstream_full.log | head -8
+            echo "  完整日志：/tmp/upstream_full.log"
             exit 1
         fi
     else

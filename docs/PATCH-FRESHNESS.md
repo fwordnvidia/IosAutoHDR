@@ -8,14 +8,18 @@
 | 项 | 值 |
 | --- | --- |
 | 补丁基线（`patch/BASELINE`） | `d5cbf7ff53f75b6132b17ce3a442d431bbbc8726`（2026-11-17） |
-| 上游默认分支 | `main` = `b66dc5644a6f`（比基线新） |
+| 上游默认分支 | `main` = `b66dc5644a6f`（第一次采样）→ `b49de8179a00`（十分钟后再采，又前进） |
 | 上游最新 tag | `v0.5.4` = `5c3fedbdeb6c` |
 | `git apply --check` 到 `main` | **通过**（无 hunk 被拒） |
-| 实打上后 `./run_all.sh <该树>` | **rc=0，149 项 ✓** |
+| 实打上后 `./run_all.sh <该树>` | **rc=0，149 项 ✓**（两次采样都是 149 项，`--full` 用时 2m26s） |
 | 上游 `graphics/runtime/tools/compat` 变动 | 81 个文件，+1073 −145 |
 | 与我们补丁**重叠**的文件 | 仅 `graphics/nvn/gfx/nvn/nvn_mtl.m`（上游 +75 −7，改的是 PSO 首遇等待 `fu_cls_report`/`fu_list_class`，与我们的 HDR 直方图/上屏路径不同区） |
 | 上游 HDR/EDR 意图标记 | **0 个文件**（`S2A_HDR`/`ExtendedDynamicRange`/`EDRHeadroom`/`potentialEDR` 在 `graphics`、`runtime` 零命中）⇒ 本补丁仍是纯增量 |
 | 提到 `RGBA16Float` 的文件 | 22 个，属通用浮点格式处理，不构成 HDR 实现 |
+
+> 上游 `main` 在**不停地动**：本文第一次采样是 `b66dc564`，约十分钟后再跑就是 `b49de817`。
+> 两次都 apply 干净、都 149 项全过。所以本文记的 sha 必然很快过期——**判断以自己跑出来的
+> 结果为准**，`./scripts/check_upstream.sh --full` 两分半就能给一份新的。
 
 ## 这个结论为什么不是平凡的
 
