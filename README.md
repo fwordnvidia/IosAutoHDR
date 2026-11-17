@@ -11,8 +11,9 @@
 > upstream `d5cbf7ff53f7` (2026-11-17). Everything is documented in Chinese; code identifiers and comments are bilingual
 > enough to follow the math.
 >
-> **状态 / Status:** 算法层、C 侧接线、ObjC 语法闸门、上屏 MSL 编译均已通过；**未**做链接级与真机验证
-> （GitHub 账号被停用后 CI 不可触发，真机在 Windows 侧）。See `docs/DESIGN.md` §7.
+> **状态 / Status:** 算法层、C 侧接线、ObjC 语法闸门、上屏 MSL 编译均已通过；**未**做链接级与真机验证。
+> 真机设备本身可达（装/跑/抓日志都通），卡在「本机编不出 ipa」——盘点与成本见 `docs/DEVICE-PLAN.md`。
+> See `docs/DESIGN.md` §7.
 
 - `src/nvn_hdr.h` — 出屏侧：sRGB→线性、保色相增益曲线、EDR 层接线
 - `src/nvn_hdr_auto.h` — L0：256 格 log2 直方图 → 99.5 分位 → knee，含平滑与死区
@@ -177,7 +178,7 @@ vim src/nvn_hdr.h              # src/ 是唯一真相源
 | 与 0.4.0 补帧共存 | ✅ 补帧链四处格式参数化（含 `fi_commit` 的 `present_pipeline`），MetalFX 不收 16F 时退回 8 位并告警（run 43729167355 语法闸门 rc=0） |
 | 16F 下 AA / MetalFX 放大 | ⬜ 内部图仍是 8 位，当前跳过并打黄字 |
 | 诊断行 | ✅ `S2A_HDR_LOG=1` 每 600 帧打一行 `HDR stat: fmt=16F head=2.00 knee=… white=… avg=… scene=… frozen=… itm=…`，格式由 `t_hdr_stat` 19 项钉死（真机三格矩阵靠它取证） |
-| 真机画质/性能 | ⬜ 无设备 |
+| 真机画质/性能 | ⬜ 未上机——设备其实可达（iPhone SE 3 / iOS 27.3，装、跑、抓日志三条通道都通），缺的只是 ipa：本机无 iOS SDK/ld64，编不出来。盘点与四条路线的成本见 `docs/DEVICE-PLAN.md` |
 
 ## 测试抓出来的两个真 bug（已修）
 
