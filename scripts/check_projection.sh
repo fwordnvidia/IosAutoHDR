@@ -81,6 +81,31 @@ else
     ok "投影未带 workflow（SYNC_CI=1 同步后本组就会校验它只手动跑）"
 fi
 
+say '10) 换行不被 Git 改写（.gitattributes 有 * -text，补丁 sha256 才不会变）'
+# 这一组是给 Windows 读者的。Git for Windows 默认 core.autocrlf=true，克隆时会把文本文件的
+# 换行改成 CRLF —— 然后 patch/hdr-auto-l1.patch 的 sha256 与 SHA256SUMS 里那个值对不上，
+# consumer_test.sh 打补丁报 "corrupt patch"。`* -text` 让 Git 完全不做转换（比 `* text=auto
+# eol=lf` 更强：字节原样进出，不经过任何规范化）。源码仓 2026-11-17 之前就有这一行，投影仓没有。
+if [ ! -f .gitattributes ]; then
+    bad "缺 .gitattributes：Windows 上 core.autocrlf=true 的 clone 会把补丁改成 CRLF，sha256 对不上"
+else
+    if grep -qE '^\*[[:space:]]+-text[[:space:]]*$' .gitattributes; then
+        ok '.gitattributes 有 * -text（Git 不做任何换行转换）'
+    else
+        bad ".gitattributes 没有 * -text（现有：$(head -2 .gitattributes | tr '\n' ' ')）"
+    fi
+    # 投影里的补丁必须与源码仓逐字节相同：既抓「投影忘了同步」，也抓「换行被改过」。
+    SRC=${SRC:-/home/sechs/ios-build/hdr-auto}
+    if [ -f "$SRC/patch/hdr-auto-l1.patch" ]; then
+        a=$(sha256sum patch/hdr-auto-l1.patch | cut -d' ' -f1)
+        b=$(sha256sum "$SRC/patch/hdr-auto-l1.patch" | cut -d' ' -f1)
+        if [ "$a" = "$b" ]; then ok "补丁与源码仓逐字节一致（sha256 ${a%??????????????????????????????????????????????????????}…）"
+        else bad "投影里的补丁与源码仓不同（投影 ${a}… / 源码 ${b}…）—— 忘了 sync 还是换行被改？"; fi
+    else
+        ok "本机没有源码仓（$SRC）—— 跳过逐字节比对"
+    fi
+fi
+
 say ""
 if [ "$fail" -eq 0 ]; then say "✓ 公开投影自检通过：仓库性质与 README 声称一致"; exit 0; fi
 say "✗ $fail 项不通过"

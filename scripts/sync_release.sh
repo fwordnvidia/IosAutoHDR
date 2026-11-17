@@ -36,6 +36,13 @@ cp "$ROOT/README.md" "$DST/README.md"
 # 照文档做的人第一步就 command not found。2026-11-17 消费端测试发现（tar 包里有，投影里没有）。
 cp "$ROOT/run_all.sh" "$ROOT/verify.sh" "$DST/" || exit 1
 
+# .gitattributes：**这一行不是排版洁癖**。公开仓库要给人 clone，Windows 的 Git 默认
+# core.autocrlf=true，会把文本文件的换行改成 CRLF —— 然后 patch/hdr-auto-l1.patch 的
+# sha256 就变了，SHA256SUMS 校验失败、consumer_test 打补丁报 corrupt patch。
+# `* -text` 让 Git 完全不做换行转换（比 `* text=auto eol=lf` 更强：字节原样进出）。
+# 源码仓 /home/sechs/ios-build 早就有这一行，投影仓一直到 2026-11-17 都没有。
+printf '* -text\n' > "$DST/.gitattributes"
+
 # CI 配置默认**不**进投影。原因不在合规（那个 workflow 只接受 workflow_dispatch），
 # 而在凭据：GitHub 拒绝用没有 `workflow` scope 的 PAT 创建/改写 workflow 文件，
 # 报 “refusing to allow a Personal Access Token to create or update workflow … without
