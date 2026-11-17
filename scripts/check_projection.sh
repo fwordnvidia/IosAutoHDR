@@ -49,6 +49,14 @@ grep -q 'jhaizhou-ops/S2Arm' README.md 2>/dev/null && ok "README 写明上游出
 say "7) 基线与文档一致"
 if python3 scripts/check_baseline.py >/dev/null 2>&1; then ok "patch/BASELINE 与 README/PR 对齐"; else bad "基线不一致（跑 python3 scripts/check_baseline.py 看细节）"; fi
 
+say "8) 根级入口脚本存在（README 的接收步骤要真能照做）"
+# 起因（2026-11-17）：白名单同步只拷了 README 与 src/docs/patch/tools/scripts，投影里从来没有
+# run_all.sh / verify.sh，而 README 让使用者第一步就敲 `./run_all.sh <树>`。tar 包里有，
+# 只 clone 投影的人第一步就 command not found —— 而此前 7 组自检全绿。
+for f in run_all.sh verify.sh; do
+    if [ -f "$f" ] && [ -x "$f" ]; then ok "$f 存在且可执行"; else bad "缺 $f（README 让使用者敲它，投影里却没有）"; fi
+done
+
 say ""
 if [ "$fail" -eq 0 ]; then say "✓ 公开投影自检通过：仓库性质与 README 声称一致"; exit 0; fi
 say "✗ $fail 项不通过"

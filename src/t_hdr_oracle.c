@@ -16,6 +16,7 @@
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "nvn_hdr.h"
 #include "nvn_hdr_auto.h"
@@ -191,23 +192,41 @@ static void compare(const char *tag, const uint32_t h[S2A_HDR_HIST_BINS]) {
 }
 
 int main(int argc, char **argv) {
-    // 一、真实照片（有就比，没有就跳过；不因为缺文件判失败）
-    const char *photos[] = {
-        "../build/real/p_Clouds_by_Tibor_Mokanszki.ppm",
-        "../build/real/p_Fuji_san_by_amaral.ppm",
-        "../build/real/p_Monument_valley_by_orbitelambda.ppm",
-        "build/real/p_Clouds_by_Tibor_Mokanszki.ppm",
-        "build/real/p_Fuji_san_by_amaral.ppm",
-        "build/real/p_Monument_valley_by_orbitelambda.ppm",
+    // 一、真实照片（一张都读不到才算失败）
+    //
+    // 查找顺序：$S2A_REAL_DIR/<名> → build/real/<名> → ../build/real/<名>。
+    // 为什么要环境变量（2026-11-17 消费端测试撞出来的）：verify.sh 是在**目标树根**跑单测的，
+    // 而素材在交付目录的 testdata/ 下、不在树里，于是这一套永远读到 0 张、永远判失败；
+    // 开发目录里因为 cwd 正好有 build/real/ 才一直是绿的。
+    const char *names[] = {
+        "p_Clouds_by_Tibor_Mokanszki.ppm",
+        "p_Fuji_san_by_amaral.ppm",
+        "p_Monument_valley_by_orbitelambda.ppm",
     };
+    const char *dir = getenv("S2A_REAL_DIR");
     int used = 0;
-    for (int k = 0; k < (int)(sizeof photos / sizeof *photos); k++) {
+    for (int k = 0; k < (int)(sizeof names / sizeof *names); k++) {
+        char path[512];
         uint32_t h[S2A_HDR_HIST_BINS];
-        if (!hist_from_ppm(photos[k], h)) continue;
-        compare(photos[k], h);
+        int got = 0;
+        if (dir && *dir) {
+            snprintf(path, sizeof path, "%s/%s", dir, names[k]);
+            got = hist_from_ppm(path, h);
+        }
+        if (!got) {
+            snprintf(path, sizeof path, "build/real/%s", names[k]);
+            got = hist_from_ppm(path, h);
+        }
+        if (!got) {
+            snprintf(path, sizeof path, "../build/real/%s", names[k]);
+            got = hist_from_ppm(path, h);
+        }
+        if (!got) continue;
+        compare(path, h);
         used++;
     }
-    CHK(O_WHITE_OK, used > 0 || argc > 1, "一张真实照片都没读到（在仓库根跑，或传 --allow-missing 表示接受）");
+    CHK(O_WHITE_OK, used > 0 || argc > 1,
+        "一张真实照片都没读到（素材在 testdata/：设 S2A_REAL_DIR=…/testdata，或传 --allow-missing 表示接受）");
 
     // 二、随机直方图（现实范围）
     for (int t = 0; t < 4000; t++) {

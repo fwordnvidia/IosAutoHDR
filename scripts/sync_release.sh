@@ -16,6 +16,10 @@ MSG=""; [ "${2:-}" = "--commit" ] && MSG=${3:-sync}
 SRC_OK="nvn_hdr.h nvn_hdr_auto.h nvn_hdr_auto_l1.h nvn_hdr_hist.inc"
 for f in $SRC_OK; do cp "$ROOT/src/$f" "$DST/src/$f" || exit 1; done
 for f in "$ROOT"/src/t_hdr*.c; do cp "$f" "$DST/src/"; done
+# 测试用真实照片（三张 480x270 PPM，来源与授权见 docs/SOURCES.md）。
+# 不放进来，公开仓库的 t_hdr_oracle 就永远是「真实照片 0 张」——那一步的对账等于没跑。
+mkdir -p "$DST/testdata"
+cp "$ROOT"/testdata/*.ppm "$DST/testdata/" 2>/dev/null
 # 文档、补丁、工具
 cp "$ROOT"/docs/*.md "$DST/docs/" 2>/dev/null
 cp "$ROOT"/patch/hdr-auto-l1.patch "$ROOT"/patch/BASELINE "$ROOT"/patch/src.manifest "$DST/patch/" || exit 1
@@ -27,6 +31,10 @@ for f in "$ROOT"/scripts/*; do
     esac
 done
 cp "$ROOT/README.md" "$DST/README.md"
+# 根级入口脚本：投影的「接收步骤」写的就是 `./run_all.sh <树>` / `./verify.sh <树>`，
+# 但白名单此前只拷了 README 与 src/docs/patch/tools/scripts —— 于是公开仓库里根本没有这两个文件，
+# 照文档做的人第一步就 command not found。2026-11-17 消费端测试发现（tar 包里有，投影里没有）。
+cp "$ROOT/run_all.sh" "$ROOT/verify.sh" "$DST/" || exit 1
 
 # 清掉「曾经误拷进去的上游整文件」，否则自检红
 for bad in nvn_mtl.m host_adapt.m nvn_present_fi.inc galaxy_ng.m; do rm -f "$DST/src/$bad"; done

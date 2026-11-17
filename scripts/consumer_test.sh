@@ -17,15 +17,22 @@ trap 'rm -rf "$TMP"' EXIT INT TERM
 
 echo "=== 解包 $TARBALL → $TMP ==="
 tar xzf "$TARBALL" -C "$TMP" || exit 1
-if [ -e "$TMP/build" ]; then
+# 包有两种历史布局：早期平铺（根部就是 run_all.sh），2026-11 起带一层 `hdr-auto/`
+# （`tar czf … -C <仓库> hdr-auto`，接收说明里写的就是「得到 hdr-auto/」）。两种都得能跑，
+# 否则「交付件自己验证不过」——而这恰恰是 2026-11-17 那次真实的失败：包是新的、脚本还按平铺找。
+PKG="$TMP"
+[ -f "$PKG/run_all.sh" ] || { [ -f "$TMP/hdr-auto/run_all.sh" ] && PKG="$TMP/hdr-auto"; }
+[ -f "$PKG/run_all.sh" ] || { echo "✗ 包里找不到 run_all.sh（布局又变了？根下有：$(ls "$TMP" | head -5 | tr '\n' ' ')）"; exit 1; }
+echo "· 包内根目录：${PKG#$TMP}"
+if [ -e "$PKG/build" ]; then
     echo "✗ 包里不该有 build/（那是本机产物）"; exit 1
 fi
 
 echo "=== 包里跑全部闸门 ==="
 if [ $# -ge 1 ]; then
-    "$TMP/run_all.sh" "$1" || exit 1
+    "$PKG/run_all.sh" "$1" || exit 1
 else
-    "$TMP/run_all.sh" || exit 1
+    "$PKG/run_all.sh" || exit 1
 fi
 
 echo

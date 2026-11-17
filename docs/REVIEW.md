@@ -60,7 +60,7 @@
 | `t_hdr_knee_mirror.c` | 144 | MSL 分位阈值 |
 | `t_hdr_letterbox.c` | 127 | 画幅/黑边与拐点无关 |
 | `t_hdr_map.c` | 193 | BT.2408 内容映射（C 与 MSL 转写对账） |
-| `t_hdr_oracle.c` | 260 | 白点/重心 与独立参考实现对账（不验场景，验实现是否偏离头文件里的定义） |
+| `t_hdr_oracle.c` | 279 | 白点/重心 与独立参考实现对账（不验场景，验实现是否偏离头文件里的定义） |
 | `t_hdr_pipeline.c` | 198 | 管线格式自适应 |
 | `t_hdr_publish.c` | 125 | knee 原子发布（撕裂） |
 | `t_hdr_quality.c` | 269 | 量化台阶 |

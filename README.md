@@ -151,7 +151,7 @@ vim src/nvn_hdr.h              # src/ 是唯一真相源
 ✓ t_hdr_robust：下标 / 空直方图 / uint32 溢出 / 垃圾上一帧状态 / 20 万次 fuzz 15 项 → 全过
 ```
 
-补丁本体：`patch/hdr-auto-l1.patch`，**42 文件 +6870 行**（−26），`sha256 012798703ed198140fdc6719eb13e1dca6860eb3f6c7419f5a34adc8f30c6679`。
+补丁本体：`patch/hdr-auto-l1.patch`，**42 文件 +6889 行**（−26），`sha256 3fa19b237182e0833116122e32276f53e31256960b8e5b01f6e4a3111dbbce5c`。
 
 补丁同时修了一个会直接编译失败的缺口：`nvn_hdr_hist.inc` 要 `#include "nvn_hdr_hist_msl.h"`，而该基线的 `graphics/nvn/Makefile` 里**没有**生成它的规则（`GENH` 只列 `gal_tess_msl.h`）。补丁补上 `GENH` 条目与 `embed_msl.py` 规则，否则这条链路一被 include 就断。
 

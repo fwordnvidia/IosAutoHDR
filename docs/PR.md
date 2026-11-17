@@ -110,7 +110,7 @@ MSL kernel、ObjC `.inc` 这些只在设备上执行的代码，编译不进本�
 | `present_encode_slot` / `present_encode_m4` 去掉 `id<MTLTexture> mirror` 参数（上游不再向镜像层画第二遍） | 早退行里的 `&& (!mirror \|\| present_blit(…, mirror, …))` 去掉；`hdr_hist_tick`、`#include "nvn_hdr_hist.inc"`、`hdr_dst` 判定块按新结构重新插 |
 | `present_blit` / `present_blit_m4` 签名**未变**（仍带 `int screen`） | 两处 `hdr_head_tick();` 与所有调用点都不用动 |
 
-结果：补丁 **42 文件 / +6870 −26 行 / `sha256 012798703ed19814…`**，`check_landing.py` 56/56、
+结果：补丁 **42 文件 / +6889 −26 行 / `sha256 3fa19b237182e083…`**，`check_landing.py` 56/56、
 `check_callsites.py`（16 定义 / 63 调用点）、`check_format_assumptions.py` 13/13 全过。
 
 ### 历史：2026-11-16 `0db51505` → `75eb4302`（371 个提交）
