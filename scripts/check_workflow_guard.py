@@ -18,6 +18,7 @@
 """
 import os
 import re
+import subprocess
 import sys
 
 try:
@@ -100,7 +101,55 @@ def main():
         if re.search(word, raw, re.M):
             problems.append("出现 %r —— 这个 workflow 只编 shader 与语法检查，不 build 整包" % word)
 
-    # 6) 写死的基线必须与 patch/BASELINE 一致
+    # 6) 不许用 matrix：它是「一次起多台虚机」的另一种写法
+    for job_id, job in (doc.get("jobs") or {}).items():
+        if isinstance(job, dict) and job.get("strategy", {}).get("matrix"):
+            problems.append("job %s 用了 strategy.matrix：一次 push/点按就能起 N 台虚机" % job_id)
+
+    # 7) uses: 必须钉版本，不许追 main/master（上游一改行为就变，且不可复核）
+    for m in re.finditer(r"uses:\s*([^\s#]+)", raw):
+        ref = m.group(1)
+        if "@" not in ref:
+            problems.append("uses: %s 没钉版本" % ref)
+        else:
+            tag = ref.split("@", 1)[1]
+            if tag in ("main", "master", "HEAD"):
+                problems.append("uses: %s 追分支而不是版本" % ref)
+
+    # 8) 每个 run: 块的 shell 语法都要在本地先过一遍 ——
+    #    这个 workflow 只有在 macOS 上才跑得起来，语法错一次就白烧一段 runner 时长。
+    steps = []
+    for job_id, job in (doc.get("jobs") or {}).items():
+        if isinstance(job, dict):
+            for i, step in enumerate(job.get("steps") or []):
+                if isinstance(step, dict) and step.get("run"):
+                    steps.append((job_id, i, step.get("name", ""), step["run"]))
+    for job_id, i, name, body in steps:
+        r = subprocess.run(["bash", "-n"], input=body, text=True, capture_output=True)
+        if r.returncode != 0:
+            first = (r.stderr.strip().splitlines() or ["?"])[0]
+            problems.append("job %s 第 %d 步「%s」的 run 脚本 bash -n 失败：%s" % (job_id, i + 1, name, first))
+
+    # 9) run 块里引用的树内文件必须真的存在（引用错路径 = 第一次手动跑就红）
+    for job_id, i, name, body in steps:
+        for ref in re.finditer(r"(?<![\w/.-])((?:src|scripts|tools|testdata|patch|docs)/[\w./-]+\.(?:sh|py|c|m|metal|inc|h|patch|ppm))", body):
+            rel = ref.group(1)
+            if not any(os.path.exists(os.path.join(base, rel)) for base in (ROOT, os.path.dirname(ROOT))):
+                problems.append("job %s 第 %d 步引用了不存在的文件：%s" % (job_id, i + 1, rel))
+
+    # 10) 引用到的上游路径必须落在 sparse 集里 —— 否则 clone 出来的树里根本没有它
+    #     （2026-11-17 真实踩到：-I/tmp/s2a/build/nvn/gen 指向仓库里不存在的目录）
+    sparse_lines = re.findall(r"git sparse-checkout (?:set|add) ([^\n\\]+)", raw)
+    dirs = set()
+    for line in sparse_lines:
+        dirs.update(t for t in line.split() if not t.startswith("#"))
+    for m in re.finditer(r"/tmp/s2a/([A-Za-z0-9_.-]+)", raw):
+        seg = m.group(1)
+        if dirs and seg not in dirs and seg != "s2a":
+            problems.append("引用了 /tmp/s2a/%s，但它不在 sparse 集（%s）里 ⇒ 干净树里不存在"
+                            % (seg, " ".join(sorted(dirs))))
+
+    # 11) 写死的基线必须与 patch/BASELINE 一致
     if not os.path.isfile(BASELINE):
         problems.append("找不到 patch/BASELINE")
     else:

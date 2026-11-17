@@ -14,7 +14,7 @@ cd IosAutoHDR && ./scripts/check_projection.sh
 | 不做 | 怎么核验 |
 | --- | --- |
 | 不跑定期 CI | 源码树里的 `workflows/verify.yml` **只接受 `workflow_dispatch`**，出现 push / pull_request / schedule 即失败（`0w15/5`）。投影默认不带它——推它需要 PAT 的 `workflow` scope，不为一个 CI 文件去扩权 |
-| 不并发起虚机 | 该 workflow 有 `concurrency`（同 ref 只跑一个）与 `timeout-minutes: 20`；本机 `check_workflow_guard.py` 逐条核（投影里带上时由第 9 组再核一次） |
+| 不并发起虚机 | 该 workflow 有 `concurrency`（同 ref 只跑一个）与 `timeout-minutes: 20`，且**不许用 `matrix`**（那是「一次点按起 N 台」的另一种写法）；本机 `check_workflow_guard.py` 逐条核（投影里带上时由第 9 组再核一次） |
 | 不用 runner 构建 App | workflow 里禁止出现 `xcodebuild` 与 `make`；它只做三件事：`xcrun metal` 编 shader、常数对账、`clang -fsyntax-only` |
 | 不含上游整文件 | 无 `nvn_mtl.m` / `host_adapt.m` / `nvn_present_fi.inc`；`patch/` 里只有 diff 文本 |
 | 不含构建产物 | 无 `build/`、`__pycache__/`、`*.tar.gz`、`*.bundle`、`*.o`、`*.so` |
@@ -43,6 +43,17 @@ public 以绕开账单门限——这一点在提交信息里留下了原文，�
 「从此不碰 Actions」，而是把触发方式收成手动、把并发收成一个、把时长收在 20 分钟内，
 并且**只用它做本地做不到的那三件事**（Metal 编译、常数对账、ObjC 语法）——这三件在
 Ubuntu 上无论跑多少次都跑不出来。跑一次约 10 分钟，公开仓库不消耗额度。
+
+### 为什么敢说「第一次手动跑就能过」
+
+这个 workflow 只能在 macOS 上跑，语法或路径写错一次就白烧一段 runner 时长。所以本地
+`check_workflow_guard.py` 把它能在 Linux 上核的部分全核了（共 11 条），本轮靠它抓到三处真错：
+
+| 抓到的错 | 为什么本地就能发现 |
+| --- | --- |
+| `clang … host_adapt.m` 假设它和 `nvn_mtl.m` 同目录 | 实际在 `graphics/nvn/host_adapt.m`；对照上游树就知道 |
+| `-I/tmp/s2a/build/nvn/gen` | 上游仓库里**没有** `build/` 目录；而且它不在 sparse 集里，clone 出来永远不存在 |
+| 每个 `run:` 块没做语法校验 | 现在逐个跑 `bash -n`；`for`/`if` 写错一次就是一次白跑 |
 
 ## 三、维护者此后遵守的九条
 
