@@ -23,10 +23,10 @@ index 97f2dce9..f81f3817 100644
  	python3 $(ROOT)/graphics/metal/tools/embed_msl.py $< k_aa_$* $@
 diff --git a/graphics/nvn/gfx/nvn/nvn_hdr.h b/graphics/nvn/gfx/nvn/nvn_hdr.h
 new file mode 100644
-index 00000000..7bf1908e
+index 00000000..1299bfb6
 --- /dev/null
 +++ b/graphics/nvn/gfx/nvn/nvn_hdr.h
-@@ -0,0 +1,541 @@
+@@ -0,0 +1,555 @@
 +// HDR 出屏（S2A_HDR_OUTPUT）：直连层的 drawable 换成 RGBA16Float，层声明 EDR，
 +//   上屏着色器把 sRGB 编码值线性化后按亮度扩张 headroom（ITM，反色调映射），让画面里本来就有的高光进到 >1.0。
 +// 只做精度不做扩张不算 HDR：线性 1.0 落在 SDR 参考白上，观感与 SDR 一模一样，只是少了 8 位量化。
@@ -158,6 +158,20 @@ index 00000000..7bf1908e
 +    s2a_hdr_itm r = p;
 +    if (s2a_hdr_head_live > 0.0f) r.head = s2a_hdr_head_live;   // 运行期覆盖优先
 +    return r;
++}
++
++// S2A_HDR_HEADROOM 是否被**显式**指定成合法值（1..4）。
++//   为什么需要这个判据：宿主每帧读屏幕 EDR 上界那条路（nvn_mtl.m 的 hdr_head_tick）
++//   会写 s2a_hdr_head_set()，而运行期覆盖优先于环境变量 —— 于是在 SDR 屏（上界 1.0）上
++//   拿 S2A_HDR_HEADROOM=2.0 做 A/B 时，第一帧之后就被屏幕读数覆盖回 1.0，
++//   看起来像「这个开关没用」。显式给了值就是「我要这个值」：那条路必须让位。
++//   解析规则必须与 s2a_hdr_itm_params() 完全一致（同样只认 1.0..4.0）。
++static inline int s2a_hdr_env_pinned(void) {
++    const char *e = getenv("S2A_HDR_HEADROOM");
++    if (!e || !*e) return 0;
++    char *end = NULL;
++    double v = strtod(e, &end);
++    return (end && end != e && v >= 1.0 && v <= 4.0) ? 1 : 0;
 +}
 +
 +// 0 = 走原来的 BGRA8 路径（逐字节同旧行为）；1 = RGBA16Float + EDR。
@@ -1685,7 +1699,7 @@ index 00000000..a001187a
 +
 +#endif
 diff --git a/graphics/nvn/gfx/nvn/nvn_mtl.m b/graphics/nvn/gfx/nvn/nvn_mtl.m
-index c32e6b01..d77e6cd1 100644
+index c32e6b01..dc85806d 100644
 --- a/graphics/nvn/gfx/nvn/nvn_mtl.m
 +++ b/graphics/nvn/gfx/nvn/nvn_mtl.m
 @@ -817,7 +817,7 @@ void mtl_init(void) {
@@ -1697,7 +1711,7 @@ index c32e6b01..d77e6cd1 100644
              if (!g_present_uv[i]) MDIE("failed to create present UV buffer[%d]", i);
              res_add(g_present_uv[i]);
          }
-@@ -17595,17 +17595,139 @@ static CAMetalLayer *g_present_layer_resident;
+@@ -17595,17 +17595,147 @@ static CAMetalLayer *g_present_layer_resident;
  #endif
  void mtl_present_test_stall(uint64_t ns) { g_present_stall_ns = ns; }
  #include "nvn_present_aa.inc"
@@ -1735,6 +1749,14 @@ index c32e6b01..d77e6cd1 100644
 +//   一直用起局时的值会让画面在亮度变化后过亮或欠亮；死区 1% 避免读数抖动带出闪烁。
 +//   上屏 buffer（g_hdr_knee[2]）与 CPU 侧 ITM 读同一个 s2a_hdr_head_live（见 nvn_hdr.h）。
 +static void hdr_head_tick(void) {
++    // S2A_HDR_HEADROOM 显式给了值就是「我要这个值」：让位。
++    //   否则在 SDR 屏（上界 1.0）上做 A/B（S2A_HDR_HEADROOM=2.0）时，这一帧就会把它覆盖回 1.0，
++    //   看起来像那个开关没用（同 hdr_extra_once 的注释：head 曾经一直是静态初值）。
++    static int pinned_logged;
++    if (s2a_hdr_env_pinned()) {
++        if (!pinned_logged) { pinned_logged = 1; MLOG("HDR: S2A_HDR_HEADROOM 显式指定，运行期不跟随屏幕 EDR 上界（要跟随就 unset 它）"); }
++        return;
++    }
 +    CAMetalLayer *layer = g_present_layer_resident;
 +    if (layer == nil) return;
 +    if (![layer respondsToSelector:@selector(maximumExtendedDynamicRangeColorComponent)]) return;
@@ -1838,7 +1860,7 @@ index c32e6b01..d77e6cd1 100644
          if (!lib) MDIE("present shader compile failed %s", e.localizedDescription.UTF8String);
          MTLRenderPipelineDescriptor *pd = [MTLRenderPipelineDescriptor new];
          pd.vertexFunction = [lib newFunctionWithName:@"vs"]; pd.fragmentFunction = [lib newFunctionWithName:@"fs"];
-@@ -17636,6 +17758,7 @@ static id<MTLTexture> present_raw_src(id<MTLTexture> src) {
+@@ -17636,6 +17766,7 @@ static id<MTLTexture> present_raw_src(id<MTLTexture> src) {
  __attribute__((weak)) double s2a_cpatch_present_aspect(void) { return 0; }   // native runtime/src/cpatch.c: current aspect while an adaptive community widescreen patch is on; graphics unit tests without the host have none
  #include "nvn_present_fit.h"   // pf_crop_fit (present_now) / pf_viewport (both blits); plain C, tested by graphics/nvn/tests/t_present_fit.c
  static int present_blit(id<MTLCommandBuffer> cb, id<MTLTexture> src, id<MTLTexture> dst, const int crop[4], BOOL flip, int screen) {
@@ -1846,7 +1868,7 @@ index c32e6b01..d77e6cd1 100644
      NSUInteger cx = 0, cy = 0, cw = src.width, ch = src.height;
      if (crop && (crop[2] || crop[3])) {
          if (crop[0] < 0 || crop[1] < 0 || crop[2] <= 0 || crop[3] <= 0 ||
-@@ -17666,8 +17789,12 @@ static int present_blit(id<MTLCommandBuffer> cb, id<MTLTexture> src, id<MTLTextu
+@@ -17666,8 +17797,12 @@ static int present_blit(id<MTLCommandBuffer> cb, id<MTLTexture> src, id<MTLTextu
      id<MTLRenderCommandEncoder> en = [cb renderCommandEncoderWithDescriptor:rp];
      [en setViewport:vp];
      [en setRenderPipelineState:g_blit_pso]; [en setFragmentTexture:present_raw_src(src) atIndex:0]; [en setFragmentSamplerState:g_blit_samp atIndex:0];
@@ -1861,7 +1883,7 @@ index c32e6b01..d77e6cd1 100644
      if (flip) { uv[1] += uv[3]; uv[3] = -uv[3]; }   // lower-left origin: the window image is stored bottom-up
      [en setFragmentBytes:uv length:sizeof uv atIndex:0];
      [en drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
-@@ -17675,6 +17802,7 @@ static int present_blit(id<MTLCommandBuffer> cb, id<MTLTexture> src, id<MTLTextu
+@@ -17675,6 +17810,7 @@ static int present_blit(id<MTLCommandBuffer> cb, id<MTLTexture> src, id<MTLTextu
      return 1;
  }
  static int present_blit_m4(id<MTL4CommandBuffer> cb, id<MTLTexture> src, id<MTLTexture> dst, const int crop[4], id<MTLBuffer> uvBuffer, id table, BOOL flip, int screen) {
@@ -1869,7 +1891,7 @@ index c32e6b01..d77e6cd1 100644
      NSUInteger cx = 0, cy = 0, cw = src.width, ch = src.height;
      if (crop && (crop[2] || crop[3])) {
          if (crop[0] < 0 || crop[1] < 0 || crop[2] <= 0 || crop[3] <= 0 ||
-@@ -17703,6 +17831,13 @@ static int present_blit_m4(id<MTL4CommandBuffer> cb, id<MTLTexture> src, id<MTLT
+@@ -17703,6 +17839,13 @@ static int present_blit_m4(id<MTL4CommandBuffer> cb, id<MTLTexture> src, id<MTLT
      float *uv = uvBuffer.contents;
      uv[0] = (float)cx / src.width; uv[1] = (float)cy / src.height; uv[2] = (float)cw / src.width; uv[3] = (float)ch / src.height;
      uv[4] = (cx + 0.5f) / src.width; uv[5] = (cy + 0.5f) / src.height; uv[6] = (cx + cw - 0.5f) / src.width; uv[7] = (cy + ch - 0.5f) / src.height;
@@ -1883,7 +1905,7 @@ index c32e6b01..d77e6cd1 100644
      if (flip) { uv[1] += uv[3]; uv[3] = -uv[3]; }   // normalized AA input is already upright
      tab_buf(table, uvBuffer, 0, 0);
      [en setViewport:vp]; [en setRenderPipelineState:g_blit_pso];
-@@ -17726,11 +17861,17 @@ static const int *rs_aa_crop(id<MTLTexture> src, id<MTLTexture> dst, const int c
+@@ -17726,11 +17869,17 @@ static const int *rs_aa_crop(id<MTLTexture> src, id<MTLTexture> dst, const int c
      if (!vw || !vh || vw > w || vh > h || (vw == w && vh == h)) return crop;
      tmp[0] = tmp[1] = 0; tmp[2] = (int)vw; tmp[3] = (int)vh; return tmp;
  }
@@ -1903,7 +1925,7 @@ index c32e6b01..d77e6cd1 100644
      id<MTLTexture> out;
      if (g_present_aa) {
          int ac[4]; NvPresentAA *s = present_aa_prepare(slot, src, rs_aa_crop(src, dst, crop, fx, ac));   // rs_aa_crop
-@@ -17757,8 +17898,12 @@ API_AVAILABLE(macos(26.0), ios(26.0))
+@@ -17757,8 +17906,12 @@ API_AVAILABLE(macos(26.0), ios(26.0))
  static int present_encode_m4(id<MTL4CommandBuffer> cb, id<MTLTexture> src, id<MTLTexture> dst, const int crop[4], int slot) {
      present_options();
      BOOL flip = atomic_load_explicit(&g_origin_ll, memory_order_relaxed) != 0;
@@ -1918,7 +1940,22 @@ index c32e6b01..d77e6cd1 100644
      id<MTLTexture> out;
      if (g_present_aa) {
          int ac[4]; NvPresentAA *s = present_aa_prepare(slot, src, rs_aa_crop(src, dst, crop, fx, ac));   // rs_aa_crop
-@@ -17923,7 +18068,47 @@ static int present_now(const tex_t *t, double period, uint64_t frame, uint64_t t
+@@ -17912,7 +18065,13 @@ static int present_now(const tex_t *t, double period, uint64_t frame, uint64_t t
+     if (!layer) { NSUInteger icw = pcw, ich = pch;   // game units (pcw x pch above; was the crop / source size read here)
+         float ky = s2a_widen_ky(); fit_geom(16.0 / 9.0 * s2a_widen_k() / (ky > 0 ? ky : 1) * ich, ich, icw, ich); }
+     if (!layer) { if (g_grab_cb) grab_present(src, crop, nolayer_sz, ticket); return 0; }   // nolayer_sz (above; the same expression on the canvas)
+-    if (!g_m3 && g_present_layer_resident != layer) { [g_q4 addResidencySet:layer.residencySet]; g_present_layer_resident = layer; }   // the layer's residency set is macOS / iOS 26 on; Metal 3 presents through the command buffer
++    // 这个指针是 hdr_head_tick() 唯一的图层来源，所以**必须每帧都记**：
++    //   原先它只在 !g_m3 分支里赋值，而 Metal 3 后端（iOS 26.x 一律、GPU 不在 Metal 4 家族、
++    //   系统 <26 —— 也就是我们自己的测试机 iPhone SE 3 / iOS 27）根本走不到那一句，
++    //   于是 hdr_head_tick() 每帧都在 layer == nil 处早退：EDR 上界跟随静默失效、
++    //   g_hdr_knee[2] 停在起局值。residencySet 的加挂仍然只要在换图层时做一次，故保留原判据。
++    if (!g_m3 && g_present_layer_resident != layer) { [g_q4 addResidencySet:layer.residencySet]; }   // the layer's residency set is macOS / iOS 26 on; Metal 3 presents through the command buffer
++    g_present_layer_resident = layer;
+ #if TARGET_OS_OSX
+     if (!layer.displaySyncEnabled) layer.displaySyncEnabled = YES;   // Windowed mode follows the display's vsync to prevent tearing
+ #endif
+@@ -17923,7 +18082,47 @@ static int present_now(const tex_t *t, double period, uint64_t frame, uint64_t t
      uint64_t dt0 = now_ns();
      id<CAMetalDrawable> dr = supplied ? supplied : [layer nextDrawable];
      if (!supplied) g_drawable_ns += now_ns() - dt0;
@@ -4741,10 +4778,10 @@ index 00000000..29aa3393
 +}
 diff --git a/graphics/nvn/tests/t_hdr_head.c b/graphics/nvn/tests/t_hdr_head.c
 new file mode 100644
-index 00000000..a07ce678
+index 00000000..1e80b29f
 --- /dev/null
 +++ b/graphics/nvn/tests/t_hdr_head.c
-@@ -0,0 +1,78 @@
+@@ -0,0 +1,101 @@
 +// 运行期 headroom：Apple EDR 的可用上界「随时」会变，宿主每帧读一次并用死区过滤
 +//
 +// 依据（developer.apple.com/documentation/metal/performing-your-own-tone-mapping）：
@@ -4818,6 +4855,29 @@ index 00000000..a07ce678
 +        }
 +        CHECK(mono, "head 1→4 时同一亮度的增益应单调不降");
 +        OK("单调性：6 组亮度上 head 1→2→3→4 增益都不降");
++    }
++
++    // 6) S2A_HDR_HEADROOM 是否「显式指定」：判据必须与 s2a_hdr_itm_params 的解析一致，
++    //    否则宿主那条「每帧跟随屏幕 EDR 上界」的路会让 A/B 开关看起来没用（见 nvn_mtl.m hdr_head_tick）
++    {
++        int pin_ok = 1;
++        unsetenv("S2A_HDR_HEADROOM");
++        if (s2a_hdr_env_pinned() != 0) pin_ok = 0;                     // 没设 → 不钉
++        setenv("S2A_HDR_HEADROOM", "", 1);
++        if (s2a_hdr_env_pinned() != 0) pin_ok = 0;                     // 空串 → 不钉（按缺省 2.0 走）
++        setenv("S2A_HDR_HEADROOM", "1.0", 1);
++        if (s2a_hdr_env_pinned() != 1) pin_ok = 0;                     // 下界内 → 钉
++        setenv("S2A_HDR_HEADROOM", "4", 1);
++        if (s2a_hdr_env_pinned() != 1) pin_ok = 0;                     // 上界 → 钉
++        setenv("S2A_HDR_HEADROOM", "5", 1);
++        if (s2a_hdr_env_pinned() != 0) pin_ok = 0;                     // 超界 → 不钉（与 itm_params 一样忽略）
++        setenv("S2A_HDR_HEADROOM", "0.5", 1);
++        if (s2a_hdr_env_pinned() != 0) pin_ok = 0;                     // 低于 1 → 不钉
++        setenv("S2A_HDR_HEADROOM", "abc", 1);
++        if (s2a_hdr_env_pinned() != 0) pin_ok = 0;                     // 非数字 → 不钉
++        unsetenv("S2A_HDR_HEADROOM");
++        CHECK(pin_ok, "S2A_HDR_HEADROOM 的钉住判据与 itm_params 的解析不一致（unset/空/1.0/4/5/0.5/abc）");
++        OK("钉住判据：unset、空串、5、0.5、abc 不钉；1.0 与 4 钉");
 +    }
 +
 +    printf("%s t_hdr_head：运行期 headroom %d 项（失败 %d）\n", fails ? "✗" : "✓", checks, fails);

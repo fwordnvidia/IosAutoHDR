@@ -73,6 +73,29 @@ int main(void) {
         OK("单调性：6 组亮度上 head 1→2→3→4 增益都不降");
     }
 
+    // 6) S2A_HDR_HEADROOM 是否「显式指定」：判据必须与 s2a_hdr_itm_params 的解析一致，
+    //    否则宿主那条「每帧跟随屏幕 EDR 上界」的路会让 A/B 开关看起来没用（见 nvn_mtl.m hdr_head_tick）
+    {
+        int pin_ok = 1;
+        unsetenv("S2A_HDR_HEADROOM");
+        if (s2a_hdr_env_pinned() != 0) pin_ok = 0;                     // 没设 → 不钉
+        setenv("S2A_HDR_HEADROOM", "", 1);
+        if (s2a_hdr_env_pinned() != 0) pin_ok = 0;                     // 空串 → 不钉（按缺省 2.0 走）
+        setenv("S2A_HDR_HEADROOM", "1.0", 1);
+        if (s2a_hdr_env_pinned() != 1) pin_ok = 0;                     // 下界内 → 钉
+        setenv("S2A_HDR_HEADROOM", "4", 1);
+        if (s2a_hdr_env_pinned() != 1) pin_ok = 0;                     // 上界 → 钉
+        setenv("S2A_HDR_HEADROOM", "5", 1);
+        if (s2a_hdr_env_pinned() != 0) pin_ok = 0;                     // 超界 → 不钉（与 itm_params 一样忽略）
+        setenv("S2A_HDR_HEADROOM", "0.5", 1);
+        if (s2a_hdr_env_pinned() != 0) pin_ok = 0;                     // 低于 1 → 不钉
+        setenv("S2A_HDR_HEADROOM", "abc", 1);
+        if (s2a_hdr_env_pinned() != 0) pin_ok = 0;                     // 非数字 → 不钉
+        unsetenv("S2A_HDR_HEADROOM");
+        CHECK(pin_ok, "S2A_HDR_HEADROOM 的钉住判据与 itm_params 的解析不一致（unset/空/1.0/4/5/0.5/abc）");
+        OK("钉住判据：unset、空串、5、0.5、abc 不钉；1.0 与 4 钉");
+    }
+
     printf("%s t_hdr_head：运行期 headroom %d 项（失败 %d）\n", fails ? "✗" : "✓", checks, fails);
     return fails ? 1 : 0;
 }

@@ -706,3 +706,36 @@ if (m.wantsExtendedDynamicRangeContent!=game.wantsExtendedDynamicRangeContent) m
 教训：**「跟随格式」和「跟随亮度语义」是两件事**。像素格式与色彩空间对齐之后，EDR 开关仍要显式跟，
 否则 16F 的数值会被当成 SDR 内容合成。以后若上游以别的形式恢复第二上屏层（或宿主自己加），
 这一条立刻适用。
+
+## 运行期 EDR 上界跟随：为什么它曾经在 Metal 3 上完全没跑
+
+Apple 的说明是「1.0 对应 SDR 最大亮度、可用 headroom 随时会变」，所以宿主每帧读一次
+`CAMetalLayer.maximumExtendedDynamicRangeColorComponent`，用 1% 死区过滤后写
+`s2a_hdr_head_set()`；上屏 buffer（`g_hdr_knee[2]`）与 CPU 侧 ITM 读同一个值 ——
+否则屏幕切到 SDR（上界 1.0）之后画面还在按 2.0 扩张，超出部分被系统硬钳（切色块/偏色）；
+XDR 屏（4.0）又只用到一半。
+
+这套东西**读的是 `g_present_layer_resident`**，而那根指针原先唯一的赋值点和
+`[g_q4 addResidencySet:]` 挤在同一个条件里：
+
+```objc
+if (!g_m3 && g_present_layer_resident != layer) { [g_q4 addResidencySet:layer.residencySet]; g_present_layer_resident = layer; }
+```
+
+`g_m3` 由 `nvn_be_pick()` 定：`NXGAL_BE=mtl3` 强制、系统 <26、**iOS 26.x 一律**（#311 backboardd
+断言崩溃的绕行）、GPU 不在 Metal 4 家族 —— 四条里任何一条都取 Metal 3。也就是说
+**绝大多数现役设备（含本项目自己的测试机 iPhone SE 3 / iOS 27 / A15）根本进不去那个分支**，
+指针恒 nil，`hdr_head_tick()` 每帧在 `layer == nil` 处早退。功能一行没少、日志一行没打、
+`run_all.sh` 全绿，`g_hdr_knee[2]` 静静停在起局值 2.0 —— 正是 `hdr_extra_once()` 注释里
+声称已经修好的那个 bug。
+
+修法保持原语义：residencySet 的加挂仍按「换图层才加」去重，指针改成**每帧无条件**记。
+
+顺带一条同类的：`S2A_HDR_HEADROOM` 显式给了值（诊断 A/B 用）也会在第一帧被屏幕读数覆盖
+（`s2a_hdr_itm_params()` 里「运行期覆盖优先」），于是「在 SDR 屏上强制 head=2.0」这个用法
+看起来毫无效果。现在 `s2a_hdr_env_pinned()`（显式 1..4）让 `hdr_head_tick()` 直接让位，
+并只打一行日志说明「要跟随就 unset 它」。
+
+教训：**「每帧都跑的函数」和「它读的那个变量有没有被赋值」是两件事**。前者有日志、
+有调用点、测试全绿，都不证明后者成立；这类缺陷只能在结构层面钉住（`0w20/5` 的 6 条不变量），
+因为设备侧代码在 Linux 侧从不编译。

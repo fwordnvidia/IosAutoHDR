@@ -131,6 +131,20 @@ static inline s2a_hdr_itm s2a_hdr_itm_params(void) {
     return r;
 }
 
+// S2A_HDR_HEADROOM 是否被**显式**指定成合法值（1..4）。
+//   为什么需要这个判据：宿主每帧读屏幕 EDR 上界那条路（nvn_mtl.m 的 hdr_head_tick）
+//   会写 s2a_hdr_head_set()，而运行期覆盖优先于环境变量 —— 于是在 SDR 屏（上界 1.0）上
+//   拿 S2A_HDR_HEADROOM=2.0 做 A/B 时，第一帧之后就被屏幕读数覆盖回 1.0，
+//   看起来像「这个开关没用」。显式给了值就是「我要这个值」：那条路必须让位。
+//   解析规则必须与 s2a_hdr_itm_params() 完全一致（同样只认 1.0..4.0）。
+static inline int s2a_hdr_env_pinned(void) {
+    const char *e = getenv("S2A_HDR_HEADROOM");
+    if (!e || !*e) return 0;
+    char *end = NULL;
+    double v = strtod(e, &end);
+    return (end && end != e && v >= 1.0 && v <= 4.0) ? 1 : 0;
+}
+
 // 0 = 走原来的 BGRA8 路径（逐字节同旧行为）；1 = RGBA16Float + EDR。
 //   只认明确的 0 / false / no / off（不分大小写）为关；没设也算关——未启用时行为一点不变。
 //   设了空串算开：启动环境显式给了这个变量，意图就是开。

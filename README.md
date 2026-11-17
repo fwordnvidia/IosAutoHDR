@@ -50,6 +50,7 @@ SpecialK / BT.2087 / BT.2408-8 / Apple EDR / Microsoft scRGB，每条都写「�
 ./scripts/check_c_warnings.sh        # 46 个源文件用 -Wall -Wextra 重编（正式构建的 -w 会遮住全部警告）
 ./scripts/check_py_lint.sh           # 34 个 Python 脚本过 ruff（E9/F/B905；需 Python ≥ 3.10）
 ./scripts/check_issue_form.py       # .github/ISSUE_TEMPLATE/*.yml 的结构（GitHub 对写错的表单是静默忽略）
+./scripts/check_hdr_hooks.py        # 设备侧 HDR 钩子的结构不变量（Linux 侧不编译，写错了全绿）
 ./scripts/check_patch_symbols.py <树>   # 补丁改过的 ObjC/MSL 里每个前缀符号都得有定义（Linux 侧从不编译它们）
 ./scripts/check_msl_symbols.py <树>     # 着色器里每个前缀符号都得在 MSL 里有定义（3555 B HDR fragment 从未真编）
 ./scripts/check_patch_fresh.py <树>     # src/ 与补丁打出来的树逐字节一致（补丁是发货内容，src 是真相源）
@@ -140,7 +141,7 @@ git apply -v /path/to/hdr-auto/patch/hdr-auto-l1.patch
 
 ```bash
 ./verify.sh /path/to/s2arm     # 打补丁 → 编三套单测 → 跑
-./run_all.sh /path/to/s2arm    # 全部闸门：31 套 904 项 + 落点 + MSL 静态 + 10 份报告对账 + ASan/UBSan
+./run_all.sh /path/to/s2arm    # 全部闸门：31 套 906 项 + 落点 + MSL 静态 + 10 份报告对账 + ASan/UBSan
 ./scripts/sanitize.sh          # 只跑内存/UB 闸门（ASan+UBSan，halt_on_error=1，约 15 s）
 ./scripts/check_callsites.py    # 调用点实参个数（上游改签名时 patch 只报定义，调用点全靠这条）
 ./scripts/check_device_coverage.py  # 设备侧代码登记表（哪些有对账、哪些写明不做的理由）
@@ -170,7 +171,7 @@ vim src/nvn_hdr.h              # src/ 是唯一真相源
 ✓ t_hdr_robust：下标 / 空直方图 / uint32 溢出 / 垃圾上一帧状态 / 20 万次 fuzz 15 项 → 全过
 ```
 
-补丁本体：`patch/hdr-auto-l1.patch`，**42 文件 +6889 行**（−26），`sha256 3fa19b237182e0833116122e32276f53e31256960b8e5b01f6e4a3111dbbce5c`。
+补丁本体：`patch/hdr-auto-l1.patch`，**42 文件 +6941 行**（−27），`sha256 6742716a816d170c89293f501aab98899395220703c0001133cd6ba7e85b02ff`。
 
 补丁同时修了一个会直接编译失败的缺口：`nvn_hdr_hist.inc` 要 `#include "nvn_hdr_hist_msl.h"`，而该基线的 `graphics/nvn/Makefile` 里**没有**生成它的规则（`GENH` 只列 `gal_tess_msl.h`）。补丁补上 `GENH` 条目与 `embed_msl.py` 规则，否则这条链路一被 include 就断。
 
@@ -178,7 +179,7 @@ vim src/nvn_hdr.h              # src/ 是唯一真相源
 
 | 项 | 状态 |
 |---|---|
-| 参数层（纯 C） | ✅ **904** 条断言（31 套）全绿，可在 Linux/CI 复跑；含四场景 nit 量化（`t_hdr_quality`） |
+| 参数层（纯 C） | ✅ **906** 条断言（31 套）全绿，可在 Linux/CI 复跑；含四场景 nit 量化（`t_hdr_quality`） |
 | 补丁可打性 | ✅ 干净 `d5cbf7ff53f7` 树 `git apply` rc=0 |
 | `hdr_hist.metal` 编译 | ✅ 这一个文件（`hdr_hist.metal`）过过 `xcrun -sdk iphoneos metal -std=metal3.0 -c` 编 `hdr_hist.metal`（第一次就抓出 MSL 里没有 `double`，已改 float）。**别的 MSL 不在这条里**，见下一行 |
 | 嵌入规则 | ✅ 本机 `embed_msl.py` 产出 7,756 B 头文件 |

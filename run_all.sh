@@ -189,6 +189,13 @@ step "0w18/5 Python 脚本 lint（34 个脚本：E9 运行时错 + F pyflakes + 
 step "0w19/5 社区文件结构（issue 表单写错时 GitHub 会静默忽略整份）"
 python3 scripts/check_issue_form.py || fail=1
 
+# 设备侧那几行在 Linux 侧从不编译，写错了没有任何闸门会红：功能还在、日志还在、全绿，
+# 只是那行永远走不到。真实案例：`g_present_layer_resident = layer;` 和 residencySet 加挂
+# 挤在同一个 `if (!g_m3 && …)` 里 ⇒ Metal 3（iOS 26.x / 非 Metal 4 GPU / 系统 <26，
+# 也就是我们自己的测试机）永远进不去 ⇒ EDR 上界跟随静默失效。这里把 6 条结构不变量钉住。
+step "0w20/5 HDR 钩子不变量（图层每帧记 / 两处 tick / 显式 headroom 让位 / 降级与回头路成对）"
+python3 scripts/check_hdr_hooks.py || fail=1
+
 step "0w3/5 文档计数（套数 / 断言总数 / 上屏 fragment 字节数 必须与实测一致）"
 python3 scripts/check_counts.py || fail=1
 

@@ -7,7 +7,7 @@
 
 ```bash
 ./run_all.sh                      # 不需要 S2Arm 树：自检 + 敏感度 + 曲线图
-./run_all.sh /tmp/v09             # 额外：把补丁打进干净 d5cbf7ff53f7 树跑 31 套单测（904 项）
+./run_all.sh /tmp/v09             # 额外：把补丁打进干净 d5cbf7ff53f7 树跑 31 套单测（906 项）
 ```
 
 `run_all.sh` 返回 0 才算通过。步骤：`0/5` 量化报告 → `1/5` 参考 CLI → `2/5` HUD 平台区 →
@@ -21,6 +21,11 @@ concurrency、timeout ≤20 分钟、不许 matrix / `secrets.` / `xcodebuild`�
 `0w18/5` Python lint（34 个脚本过 ruff E9/F/B905，`zip` 必须写 `strict=`）→
 `0w19/5` 社区文件结构（`.github/ISSUE_TEMPLATE/*.yml` 的 type/id/attributes/validations 逐项核；
 GitHub 对写错的表单是**静默忽略**——仓库页上不出现，本地却干干净净）→
+`0w20/5` HDR 钩子不变量（6 条结构断言：图层指针每帧都记、两个 present 入口都调 `hdr_head_tick()`、
+显式 `S2A_HDR_HEADROOM` 让位、取不到 drawable 的块里降级与回头路成对、降级块同时改像素格式与
+颜色空间、回头路块把 16F/EDR/扩展线性 sRGB 三件装回；这些行在 Linux 侧**从不编译**，
+写错了是全绿——真实案例：`g_present_layer_resident = layer;` 和 residencySet 加挂挤在同一个
+`if (!g_m3 && …)` 里，Metal 3（iOS 26.x、非 Metal 4 GPU、系统 <26）永远进不去 ⇒ EDR 上界跟随静默失效）→
 `4b/5` 换格式后上游隐含假设（13 条结构断言 + `docs/UPSTREAM-ASSUMPTIONS.md`；**必须排在
 4/5 打补丁之后**——它核的是打完补丁的树，曾经排在前面导致带树根跑 6 条假红）→
 `4c/5` 符号对账（补丁触及的 41 个 C 系文件里，每个 `s2a_*` / `nvn_hdr_*` / `hdr_*` 标识符
@@ -60,7 +65,7 @@ GNU patch 也不许报 `with fuzz`——fuzz 意味着上下文差几行它自�
 | 结论 | 命令 | 期望 |
 |---|---|---|
 | 补丁能在干净 `d5cbf7ff53f7` 上无冲突应用 | `git apply --check patch/hdr-auto-l1.patch`（在干净树） | 0 退出；42 个文件 |
-| 补丁文件指纹 | `sha256sum patch/hdr-auto-l1.patch` | `3fa19b23…`（42 文件，+6889 −26 行） |
+| 补丁文件指纹 | `sha256sum patch/hdr-auto-l1.patch` | `6742716a…`（42 文件，+6941 −27 行） |
 | MSL 能按 Makefile 规则嵌入 | `python3 graphics/metal/tools/embed_msl.py graphics/nvn/shaders/hdr_hist.metal k_hdr_hist out.h` | 7,948 B |
 
 上游跟随：`./scripts/check_upstream.sh` 会同时报**默认分支**与**最新 tag**，并以默认分支上能否干净打上为准
@@ -133,7 +138,7 @@ HDR stat: fmt=16F head=2.00 knee=0.7424+0.2576 white=0.7424 avg=-3.89 scene=0.00
 `run_all.sh` 的 `0x/5` 会跑自测，并用 `hdr_ref --stat-line` 的真行验两个方向（T2 必须通过、
 T3 必须失败），避免判据只会点头。
 
-## 算法（31 套单测，904 项）
+## 算法（31 套单测，906 项）
 
 | 套 | 命令（在打过补丁的树） | 期望 |
 |---|---|---|
@@ -181,7 +186,7 @@ T3 必须失败），避免判据只会点头。
 因为报告可能在 halt 生效之前就打印出来。本机 `cc` 不支持 `-fsanitize` 时脚本打印一行跳过、
 **不算失败**（不让工具链差异变成红）。
 
-实测：31 套 904 项在 `-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer` 下全过，
+实测：31 套 906 项在 `-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer` 下全过，
 无一次 sanitizer 报告。
 
 ## 交付包（消费者视角）

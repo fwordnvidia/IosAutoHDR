@@ -7,7 +7,7 @@
 > `s2a_cpatch_present_aspect()` 自适应画幅等，共 256 行），重放后反向摘除逐字节还原为上游原文。
 >
 > 合入目标应是默认分支：已实测它能**干净地打到 `main`（`0db515053e07`）**，并在那棵树上跑通
-> 31 套单测 904 项 + 落点自检 56 项 + MSL/常数核对。上游仍在自己前进（同日实测通过的还有
+> 31 套单测 906 项 + 落点自检 56 项 + MSL/常数核对。上游仍在自己前进（同日实测通过的还有
 > `6d01b7897c0d`、`8874b92d071f`、`2237da8ca323`、`3f549467b00d`、`e77fca7b949b`、`b9bd76a202ab`、
 > `1c31fdc0`、`ddfef415`、`2b5aca92`）。上游代码里 HDR/EDR 意图标记
 > 为 0，本补丁是纯增量——`./scripts/check_upstream.sh` 每次都复核这两件事。
@@ -58,7 +58,7 @@ NS2 的《S2Arm》把主机画面直接 blit 到 layer，`host_adapt.m` 里写�
 ./scripts/report_options.py --check   # 47 个常数 / 9 个环境变量 与源码注释逐一对应
 ```
 
-- 31 套单测 **904 条断言**，全部纯 C、`-lm` 即可编，无第三方依赖；
+- 31 套单测 **906 条断言**，全部纯 C、`-lm` 即可编，无第三方依赖；
 - 诊断行格式有 19 条断言（`t_hdr_stat`）：字段名/小数位/截断语义/非有限值打 `n/a`——
   真机三格矩阵的取证全靠这一行，所以它本身也当契约来测；
   参考实现 `hdr_ref --stat-line` 打的是**同一份格式化代码**，所以「设备日志」与「本机复算」
@@ -110,7 +110,7 @@ MSL kernel、ObjC `.inc` 这些只在设备上执行的代码，编译不进本�
 | `present_encode_slot` / `present_encode_m4` 去掉 `id<MTLTexture> mirror` 参数（上游不再向镜像层画第二遍） | 早退行里的 `&& (!mirror \|\| present_blit(…, mirror, …))` 去掉；`hdr_hist_tick`、`#include "nvn_hdr_hist.inc"`、`hdr_dst` 判定块按新结构重新插 |
 | `present_blit` / `present_blit_m4` 签名**未变**（仍带 `int screen`） | 两处 `hdr_head_tick();` 与所有调用点都不用动 |
 
-结果：补丁 **42 文件 / +6889 −26 行 / `sha256 3fa19b237182e083…`**，`check_landing.py` 56/56、
+结果：补丁 **42 文件 / +6941 −27 行 / `sha256 6742716a816d170c…`**，`check_landing.py` 56/56、
 `check_callsites.py`（16 定义 / 63 调用点）、`check_format_assumptions.py` 13/13 全过。
 
 ### 历史：2026-11-16 `0db51505` → `75eb4302`（371 个提交）
@@ -125,7 +125,7 @@ MSL kernel、ObjC `.inc` 这些只在设备上执行的代码，编译不进本�
 
 合并后必须核对的：`present_blit` / `present_blit_m4` 的**所有调用点**都带上了第 6 个实参（冲突列表不会报调用点，但不改就编译不过）。
 
-验证：`check_landing.py` 49/49（按函数范围断言，不按行号）、`run_all.sh /tmp/v08` rc=0（31 套 904 项 + ASan/UBSan + 10 份报告对账），补丁 41 文件 / 6673 行 / `sha256 f2e996e9771bda94…`。
+验证：`check_landing.py` 49/49（按函数范围断言，不按行号）、`run_all.sh /tmp/v08` rc=0（31 套 906 项 + ASan/UBSan + 10 份报告对账），补丁 41 文件 / 6673 行 / `sha256 f2e996e9771bda94…`。
 
 ### 历史：`dcd05e5` → `0db51505`（机械重放，9 个 hunk 全带 offset、反向 `cmp` 逐字节相同）
 
