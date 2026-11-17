@@ -116,12 +116,12 @@ def main():
               "%s：纸白(%.4f) 以下 %d 个像素逐位不动（越界 %d）" % (tag, knee_lo, checked, bad))
 
         _, _, px3 = read_ppm16(p3f)
-        diff = sum(1 for a, b in zip(px, px3) if a != b)
+        diff = sum(1 for a, b in zip(px, px3, strict=True) if a != b)
         check(diff > len(px) // 4, "%s：--p3 1 --sat 1.2 真的改变了画面（%d/%d 通道）" % (tag, diff, len(px)))
         check(max(px3) <= 65535, "%s：色域/饱和后仍不越 head（max %d）" % (tag, max(px3)))
 
         _, _, pxd = read_ppm16(dif)
-        maxd = max(abs(a - b) for a, b in zip(px, pxd))
+        maxd = max(abs(a - b) for a, b in zip(px, pxd, strict=True))
         check(0 < maxd <= 2, "%s：--dither 只动最低位（最大差 %d LSB）" % (tag, maxd))
 
     print("✓ hdr_convert：使用者命令的 4 条硬性质（%d 项）%s"

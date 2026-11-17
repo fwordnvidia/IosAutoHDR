@@ -13,7 +13,6 @@ new 文件没写说明、说明指向不存在的文件、行数变了，`--chec
 """
 import os
 import re
-import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

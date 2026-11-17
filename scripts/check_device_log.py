@@ -87,7 +87,7 @@ def common_checks(parsed):
         if s["lo"] + s["de"] > 1.0001:
             bad.append("第 %d 行：knee_hi=%.4f 超过 SDR 裁切点 1.0" % (i + 1, s["lo"] + s["de"]))
     drift = 0.0
-    for a, b in zip(st, st[1:]):
+    for a, b in zip(st, st[1:], strict=False):
         if not a["frozen"]:            # 冻结帧之间比跳变没有意义（本来就是刻意保持）
             drift = max(drift, abs(b["lo"] - a["lo"]))
     notes.append("%d 行 HDR stat；fmt=%s；head %.2f–%.2f；未冻结帧最大 knee 跳变 %.4f" % (

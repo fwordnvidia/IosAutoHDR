@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """docs/COLOR-IMAGE.md：真实照片上的颜色保真度（逐像素 CIELAB）"""
-import csv, io, os, subprocess, sys
+import csv, io, subprocess, sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent

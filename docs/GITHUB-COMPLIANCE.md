@@ -119,3 +119,28 @@ grep 命中、`!` 返回 1，脚本却继续打印「· 语法通过」⇒ 一�
 - 负向验证：往 `src/t_hdr_head.c` 末尾塞一个没人调用的静态函数 ⇒
   `::error::src/t_hdr_head.c：1 条 warning` + `‘unused_probe’ defined but not used [-Wunused-function]`，
   审计红；删掉即绿。
+
+## Python 侧：脚本就是闸门本身（0w18/5）
+
+34 个 `.py` 从没 lint 过。`ruff check --select E9,F` 一开 7 条，全是真残留：
+
+| 位置 | 问题 |
+| --- | --- |
+| `check_baseline.py:31`、`check_patch_stats.py:108` | `f"…"` 里一个占位符都没有（本该插值的地方可能曾经有） |
+| `check_msl.py:128` | `fn = re.search(…)` 算了不用——注释还写着「从右往左找最后一个名字」，实际函数名改用 `fname` 取了 |
+| `plot_curves.py:38` | `nmax` 算出来没人用（图例用的是 `rows[-1][3]` 而不是全局最大） |
+| `make_sequence.py:23` | `import struct` 多余 |
+| `report_color_image.py:3`、`report_review.py:16` | `os` / `subprocess` 多余（`report_review` 改成读补丁头后 `subprocess` 就废了） |
+
+另加 `B905`：8 处 `zip()` 没写 `strict=`。逐条看语义后分两类——
+
+- **4 处本该等长**（逐像素比较 `zip(px, px3)`、CSV 行配表头 `zip(head, r.split(","))`、两批结果对账 `zip(old_rows, rows)`）⇒ `strict=True`。`zip` 的默认行为是**按最短的截断**，等于「比了一半就宣布通过」，这正是本项目最忌讳的假绿。
+- **4 处是相邻对**（`zip(steps, steps[1:])`、`zip(steps, lo[1:])`）⇒ 天生差一个元素，显式写 `strict=False`。
+
+代价：`zip(strict=)` 需要 Python ≥ 3.10，README 已把它写成**显式依赖**（原来只写「依赖 `python3`」，
+现在写「`python3` 要 ≥ 3.10，因为用了 `zip(strict=)`」）。改完 5 个受影响脚本复跑全绿
+（`report_ablate` 57 行、`report_cost` 最慢 0.6383 µs、`report_video` 25 行、`check_convert` 15 项、
+`check_device_log --selftest` 13 项）。
+
+负向验证：往 `check_baseline.py` 末尾加 `import json` ⇒
+`scripts/check_baseline.py:92:8: F401 [*] `json` imported but unused`，脚本红；删掉即绿。

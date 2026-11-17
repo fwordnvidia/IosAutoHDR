@@ -105,7 +105,7 @@ def main():
     old = open(DOC, encoding="utf-8").read() if os.path.exists(DOC) else None
     if CHECK:
         if old != text:
-            print(f"::error::docs/PATCH-STATS.md 与补丁不符（跑 python3 scripts/check_patch_stats.py 重生）")
+            print("::error::docs/PATCH-STATS.md 与补丁不符（跑 python3 scripts/check_patch_stats.py 重生）")
             fails += 1
     else:
         open(DOC, "w", encoding="utf-8").write(text)

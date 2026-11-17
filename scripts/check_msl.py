@@ -125,7 +125,6 @@ def main():
         bodies = func_bodies(src)
         check(len(bodies) > 0, "%s：解析到 %d 个函数体" % (name, len(bodies)))
         for header, body in bodies:
-            fn = re.search(r"(\w+)\s*\(", header[::-1])  # 从右往左找最后一个名字
             fname = header.strip().split("\n")[-1].strip()[:48] or "?"
             check(body.count("{") == body.count("}"),
                   "%s：%s 括号配平" % (name, fname))

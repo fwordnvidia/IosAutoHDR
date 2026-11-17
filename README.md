@@ -48,6 +48,7 @@ SpecialK / BT.2087 / BT.2408-8 / Apple EDR / Microsoft scRGB，每条都写「�
 ./scripts/check_counts.py            # 文档里的套数/断言数/fragment 字节数 必须等于实测
 ./scripts/check_shell_helpers.py    # 脚本里调用的 ok/bad/step 必须有定义（`ok: not found` 不会置 fail）
 ./scripts/check_c_warnings.sh        # 46 个源文件用 -Wall -Wextra 重编（正式构建的 -w 会遮住全部警告）
+./scripts/check_py_lint.sh           # 34 个 Python 脚本过 ruff（E9/F/B905；需 Python ≥ 3.10）
 ./scripts/check_upstream.sh      # 上游默认分支/tag 各在哪、补丁还能不能干净打上、是否纯增量
 ./scripts/publish.sh --preflight # 只读核对：上游是否又前进、正文 sha 是否过期、gh 能不能用
 ./scripts/publish.sh             # dry-run：只打印要执行的命令
@@ -265,8 +266,13 @@ TARBALL=../hdr-auto-delivery/hdr-auto-<sha>.tar.gz ./scripts/consumer_test.sh   
 TARBALL=... ./scripts/consumer_test.sh /tmp/v04-clean                                   # 再加单测
 ```
 
-依赖只有 `cc` / `python3` /（可选）ImageMagick 与一个 upstream 树。已在 `hdr-auto-76de57d.tar.gz`
+依赖只有 `cc` / `python3` /（可选）ImageMagick 与一个 upstream 树。**`python3` 要 ≥ 3.10**
+（脚本里用了 `zip(strict=)`；这是显式依赖，不是猜的——它让「两张图尺寸不同 / CSV 列数不符 /
+两批结果行数不等」当场抛异常，而不是 `zip` 静默比前 N 个就宣布通过）。已在 `hdr-auto-76de57d.tar.gz`
 上实测通过。
+
+三个 lint 层都是可选依赖，装了才跑、没装会明确打印跳过：`ruff`（Python 脚本）、
+`shellcheck`（13 个 `.sh`）、`actionlint`（CI workflow）。
 
 ## 真实内容验证
 

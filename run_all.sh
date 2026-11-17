@@ -175,6 +175,11 @@ step "0w17/5 C 警告审计（46 个带 main 的源文件用 -Wall -Wextra 重�
 # 一开就抓到 tools/sweep_darkproxy.c 里 proxy_gap() 定义了从没被调用（候选 3 的公式早内联了）。
 ./scripts/check_c_warnings.sh || fail=1
 
+step "0w18/5 Python 脚本 lint（34 个脚本：E9 运行时错 + F pyflakes + B905 zip 显式 strict）"
+# 脚本就是闸门本身，脚本错了闸门就骗人。首次跑抓到 7 条真残留与 8 处没写 strict= 的 zip
+# （4 处本该等长 ⇒ strict=True 能抓「比了一半就宣布通过」）。
+./scripts/check_py_lint.sh || fail=1
+
 step "0w3/5 文档计数（套数 / 断言总数 / 上屏 fragment 字节数 必须与实测一致）"
 python3 scripts/check_counts.py || fail=1
 

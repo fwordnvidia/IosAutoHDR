@@ -20,7 +20,6 @@ import os
 
 # 序列帧率：tools/hdr_seq 必须以同一个值调用（report_sequence.py 会自动读取）
 FPS = 30
-import struct
 import sys
 
 W, H = 480, 270

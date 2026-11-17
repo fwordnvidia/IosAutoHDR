@@ -59,7 +59,7 @@ def clip_frames(src, tag, binp):
     rows = subprocess.run([binp, "--hz", str(FPS)] + files, capture_output=True, text=True,
                           check=True, cwd=HERE).stdout.strip().split("\n")
     hdr = rows[0].split(",")
-    recs = [dict(zip(hdr, r.split(","))) for r in rows[1:]]
+    recs = [dict(zip(hdr, r.split(","), strict=True)) for r in rows[1:]]
     ok = [r for r in recs if r["lo"] != "nan"]
     if not ok:
         return None
@@ -72,8 +72,8 @@ def clip_frames(src, tag, binp):
     # 那一瞬间「gain(white) > 1」是对的（平滑的本意），不该算不合格。
     tail = ok[-max(1, len(ok) // 3):]
     gw = [float(r["gwhite"]) for r in tail]
-    reversals = sum(1 for a, b in zip(steps, steps[1:]) if a * b < -1e-9)
-    maxstep = max((abs(s) / max(abs(x), 1e-6) for s, x in zip(steps, lo[1:])), default=0.0)
+    reversals = sum(1 for a, b in zip(steps, steps[1:], strict=False) if a * b < -1e-9)
+    maxstep = max((abs(s) / max(abs(x), 1e-6) for s, x in zip(steps, lo[1:], strict=False)), default=0.0)
     return {
         "name": tag, "frames": len(ok), "lo0": lo[0], "lo1": lo[-1],
         "lo_min": min(lo), "lo_max": max(lo),

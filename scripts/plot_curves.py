@@ -35,7 +35,6 @@ def main():
         ("head 4 / knee_lo 0.35", run(binary, 4, 0.35), "#16a34a"),
     ]
     gmax = max(r[1] for _, rows, _ in series for r in rows) * 1.05
-    nmax = max(r[3] for _, rows, _ in series for r in rows) * 1.05
 
     sx = lambda x: PAD_L + x * (W - PAD_L - PAD_R)
     sy = lambda g: H - PAD_B - (g / gmax) * (H - PAD_T - PAD_B)

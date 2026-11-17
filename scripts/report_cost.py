@@ -76,7 +76,7 @@ def main():
         if [r[0] for r in old_rows] != [r[0] for r in rows]:
             print('✗ docs/COST.md 的用例集合与工具输出不一致（重跑不带 --check 生成）')
             return 1
-        for (name, old_us), r in zip(old_rows, rows):
+        for (name, old_us), r in zip(old_rows, rows, strict=True):
             new_us = float(r[1])
             if old_us <= 0 or not (0.5 <= new_us / old_us <= 2.0):
                 print('✗ %s 的数字与实测差太远（表里 %.4f，本次 %.4f）' % (name, old_us, new_us))

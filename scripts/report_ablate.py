@@ -31,7 +31,7 @@ def run(*args):
     out = subprocess.run([BIN, *args], check=True, capture_output=True, text=True).stdout
     lines = [l for l in out.strip().split("\n") if l]
     head = lines[0].split(",")
-    return head, [dict(zip(head, l.split(","))) for l in lines[1:]]
+    return head, [dict(zip(head, l.split(","), strict=True)) for l in lines[1:]]
 
 
 def render():

@@ -28,7 +28,7 @@ DATE = parts[1] if len(parts) > 1 else ''
 if not HEX40.fullmatch(BASE):
     print(f'::error::patch/BASELINE 第一行不是 40 位 sha：{BASE}'); sys.exit(1)
 if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', DATE):
-    print(f'::error::patch/BASELINE 缺少 YYYY-MM-DD 日期（跟在 sha 后面）'); sys.exit(1)
+    print('::error::patch/BASELINE 缺少 YYYY-MM-DD 日期（跟在 sha 后面）'); sys.exit(1)
 
 # 1) README 的「目标基线」行
 txt = read('README.md')
