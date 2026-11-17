@@ -11,8 +11,16 @@
 ```
 
 `run_all.sh` 返回 0 才算通过。步骤：`0/5` 量化报告 → `1/5` 参考 CLI → `2/5` HUD 平台区 →
-`3/5` 曲线图 → `3b/5` 平台阶 → `4/5` 补丁自洽 + 十四套单测 → `0g/5` 消融 → `0h/5` 转场序列 →
-`0i/5` 每帧开销（实测控制器一次调用 0.57 µs，上限 5 µs）→ `0j/5` 对照图（12 张图的指纹清单）→ `0k/5` BT.2408 放置方式 → `0l/5` 画幅与黑边 → `0m/5` GPU/CPU 分箱对账 → `0n/5` L0 分位对账 → `0o/5` 上屏 shader 对账 → `0p/5` 运行期 headroom → `0q/5` 回读控制流 → `0u/5` knee 发布/消费 → `0v/5` 图像级用例 → `0w/5` 颜色保真 → `0e7/5` ASan+UBSan（31 套 15s）→ `0w7/5` 基线一致 → `0w8/5` README 与仓库一致（引用的路径都存在、10 个入口脚本都被写进 README）→ `0w9/5` 调用点实参个数（16 个定义 / 63 个调用点，跨文件合并定义表）。 → `0w10/5` `hdr_hist_l1` 逐行对账（MSL 的 float 累加 vs CPU 的 double：avg 差 5.96e-07 stop、white 同格、scene 0.66 stop 两版都是 31.1%；**已知差异**：GPU 侧没有 HUD 簇剔除，HUD 画面白点被顶格拉到 13.24 ⇒ hi 打满 2.0 ⇒ 这条 fallback 等于不扩张）。 → `0w11/5` 设备侧代码登记完整（13 项：12 项有对账、1 项写明理由；新增 kernel 不登记就红；`docs/DEVICE-ONLY.md` 由脚本生成并 `--check` 挡漂移）→ `0w12/5` 补帧运动估计的域（`tools/fi_domain` 实测：静止判定在 16F 线性域只有 44–64% 命中、转回编码域回到 100%，见 `docs/FI-DOMAIN.md`）→ `0w13/5` 换格式后上游隐含假设（13 条结构断言 + `docs/UPSTREAM-ASSUMPTIONS.md`）→ `0w14/5` 补丁统计三处一致（README / VERIFICATION / PR 里写的文件数、±行数、sha256 必须等于对 `patch/hdr-auto-l1.patch` 的现算，见 `docs/PATCH-STATS.md`）
+`3/5` 曲线图 → `4/5` 补丁自洽 + 31 套单测 → `0g/5` 消融 → `0h/5` 转场序列 →
+`0i/5` 每帧开销（实测值见 `docs/COST.md`，硬上限 5 µs；文档里不再写第二份数字）→ `0j/5` 对照图（12 张图的指纹清单）→ `0k/5` BT.2408 放置方式 → `0l/5` 画幅与黑边 → `0m/5` GPU/CPU 分箱对账 → `0n/5` L0 分位对账 → `0o/5` 上屏 shader 对账 → `0p/5` 运行期 headroom → `0q/5` 回读控制流 → `0u/5` knee 发布/消费 → `0v/5` 图像级用例 → `0w/5` 颜色保真 → `0e7/5` ASan+UBSan（31 套 15s）→ `0w7/5` 基线一致 → `0w8/5` README 与仓库一致（引用的路径都存在、19 个入口脚本都被写进 README）→ `0w9/5` 调用点实参个数（16 个定义 / 63 个调用点，跨文件合并定义表）。 → `0w10/5` `hdr_hist_l1` 逐行对账（MSL 的 float 累加 vs CPU 的 double：avg 差 5.96e-07 stop、white 同格、scene 0.66 stop 两版都是 31.1%；**已知差异**：GPU 侧没有 HUD 簇剔除，HUD 画面白点被顶格拉到 13.24 ⇒ hi 打满 2.0 ⇒ 这条 fallback 等于不扩张）。 → `0w11/5` 设备侧代码登记完整（13 项：12 项有对账、1 项写明理由；新增 kernel 不登记就红；`docs/DEVICE-ONLY.md` 由脚本生成并 `--check` 挡漂移）→ `0w12/5` 补帧运动估计的域（`tools/fi_domain` 实测：静止判定在 16F 线性域只有 44–64% 命中、转回编码域回到 100%，见 `docs/FI-DOMAIN.md`）→ `0w14/5` 补丁统计三处一致（README / VERIFICATION / PR 里写的文件数、±行数、sha256 必须等于对 `patch/hdr-auto-l1.patch` 的现算，见 `docs/PATCH-STATS.md`）→ `0w15/5` workflow 守卫（只许 `workflow_dispatch`、必须有
+concurrency、timeout ≤20 分钟、不许 matrix / `secrets.` / `xcodebuild`、`uses:` 必须钉版本、
+每个 `run:` 块过 `bash -n`、引用的仓库内文件与 `/tmp/s2a` sparse 段必须存在、写死的基线 sha
+必须等于 `patch/BASELINE`；装了 actionlint 与 shellcheck 就一起跑）→ `0w16/5` shell 三条
+（辅助函数必须定义过、提示串不许有反引号、`if/while` 条件里管道末段不许是 tail）→
+`0w17/5` C 警告（46 个带 main 的文件用 `-Wall -Wextra` 重编，正式构建的 `-w` 会遮住全部警告）→
+`0w18/5` Python lint（34 个脚本过 ruff E9/F/B905，`zip` 必须写 `strict=`）→
+`4b/5` 换格式后上游隐含假设（13 条结构断言 + `docs/UPSTREAM-ASSUMPTIONS.md`；**必须排在
+4/5 打补丁之后**——它核的是打完补丁的树，曾经排在前面导致带树根跑 6 条假红）
 
 它不做的事：
 编译 MSL、编译 ObjC、链接、真机——见文末。

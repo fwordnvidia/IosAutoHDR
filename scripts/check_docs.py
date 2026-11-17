@@ -41,6 +41,16 @@ for m in set(re.findall(r'\./scripts/([A-Za-z0-9_.\-]+)', readme)):
     if not (ROOT / 'scripts' / m).exists():
         fails.append(f'README 的示例命令用了 scripts/{m}，文件不存在')
 
+# 4) 文档里引用的步骤号（`0w15/5` 这类）必须真的存在于 run_all.sh。
+#    踩过的实例：`3b/5` 与 `0w13/5` 在 VERIFICATION.md 里挂了很久 —— 前者那个步骤早就
+#    不存在了（「平台阶」现在并进 0d/5 与 0l/5），后者上一轮改名成 `4b/5` 后文档没跟着改。
+#    读者按文档核步骤时会找不到，而没有任何检查发现过这件事。
+_real_steps = set(re.findall(r'step "([0-9a-z]+/5)', (ROOT / 'run_all.sh').read_text(encoding='utf-8')))
+for _md in sorted((ROOT / 'docs').glob('*.md')):
+    for _m in re.finditer(r'`([0-9a-z]+/5)`', _md.read_text(encoding='utf-8')):
+        if _m.group(1) not in _real_steps:
+            fails.append(f'{_md.name} 引用了不存在的步骤 {_m.group(1)}（run_all.sh 里没有这个 step）')
+
 if fails:
     for f in fails:
         print(f'::error::{f}')
