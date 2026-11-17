@@ -52,6 +52,7 @@ SpecialK / BT.2087 / BT.2408-8 / Apple EDR / Microsoft scRGB，每条都写「�
 ./scripts/check_issue_form.py       # .github/ISSUE_TEMPLATE/*.yml 的结构（GitHub 对写错的表单是静默忽略）
 ./scripts/check_hdr_hooks.py        # 设备侧 HDR 钩子的结构不变量（Linux 侧不编译，写错了全绿）
 ./scripts/check_ci_result.py --selftest   # CI 结果判读：绿了但 macOS 那步被跳过也算绿，判据要认得出
+./scripts/dispatch_ci.sh            # A 路线一条命令：推 workflow → 触发 → 等 → 判读（默认 dry-run）
 ./scripts/check_patch_symbols.py <树>   # 补丁改过的 ObjC/MSL 里每个前缀符号都得有定义（Linux 侧从不编译它们）
 ./scripts/check_msl_symbols.py <树>     # 着色器里每个前缀符号都得在 MSL 里有定义（3555 B HDR fragment 从未真编）
 ./scripts/check_patch_fresh.py <树>     # src/ 与补丁打出来的树逐字节一致（补丁是发货内容，src 是真相源）

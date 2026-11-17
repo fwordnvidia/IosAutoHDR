@@ -67,6 +67,24 @@ grep 命中、`!` 返回 1，脚本却继续打印「· 语法通过」⇒ 一�
 | 每个 `run:` 块没做语法校验 | 现在逐个跑 `bash -n`；`for`/`if` 写错一次就是一次白跑 |
 | `! grep -E ": error:"` 判 clang 失败 | `!` 前缀命令的失败在 `set -e` 下被 bash 豁免（SC2251），有 error 也打印「语法通过」⇒ 改成 `if grep …; then exit 1; fi` |
 
+### 从「手动点一次」到「一条命令 + 判读」
+
+推 workflow 文件需要 PAT 的 `workflow` scope（本机 fine-grained token 没有，网页上勾一下就有），
+除此之外的十来个动作（同步、提交、推、触发、轮询、取日志、判读）都已经收进
+`scripts/dispatch_ci.sh`：默认 dry-run，只打印它将要做什么；`--yes` 才真做，并且最后一定落到
+`scripts/check_ci_result.py` 的 R1–R7 判读上——**绿不绿由日志里的编译行说了算**，不由
+`conclusion: success` 说了算（macOS 那步被 `skipped` 时整个运行照样是绿的）。
+
+2026-11-18 用真实 token 跑过一次，卡在第一步推送，报文是：
+
+```
+! [remote rejected] HEAD -> main (refusing to allow a Personal Access Token to create or
+  update workflow `.github/workflows/verify.yml` without `workflow` scope)
+```
+
+也就是说：脚本本身已就绪，剩下的唯一前置条件在网页上——给 token 勾 `Workflows: Read and write`，
+或者手工把 `.github/workflows/verify.yml` 传上去，然后 `./scripts/dispatch_ci.sh --yes`。
+
 ## 三、维护者此后遵守的九条
 
 1. 不用托管 runner 做**重复**构建。唯一允许的 runner 用途是「手动、单次、只编 shader 与语法」；
