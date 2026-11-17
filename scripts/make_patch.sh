@@ -25,7 +25,6 @@ map_path() {
         hdr_hist.metal)  echo "graphics/nvn/shaders/$1" ;;
         t_*.c)           echo "graphics/nvn/tests/$1" ;;
         host_adapt.m)    echo "graphics/nvn/$1" ;;
-        play_reflection.m) echo "ios/$1" ;;
         Makefile)        echo "graphics/nvn/$1" ;;
         *)               echo "graphics/nvn/gfx/nvn/$1" ;;
     esac
@@ -38,7 +37,7 @@ check_coverage() {
         case "$rel" in
             graphics/nvn/shaders/*) base=$(basename "$rel") ;;
             graphics/nvn/tests/*)   base=$(basename "$rel") ;;
-            graphics/nvn/host_adapt.m|graphics/nvn/Makefile|ios/play_reflection.m) base=$(basename "$rel") ;;
+            graphics/nvn/host_adapt.m|graphics/nvn/Makefile) base=$(basename "$rel") ;;
             graphics/nvn/gfx/nvn/*) base=$(basename "$rel") ;;
             *) echo "⚠ 补丁含未映射路径：$rel"; miss=1; continue ;;
         esac
@@ -98,7 +97,11 @@ done
 
 ( cd "$TREE" && git add -A graphics ios && git diff --cached > "$HERE/$PATCH" )
 
-echo "✓ 补丁已重建：$(grep -c '^diff --git' "$PATCH") 文件，$(grep -c '^+' "$PATCH") 行增，sha256 $(sha256sum "$PATCH" | cut -d' ' -f1)"
+# 行数口径：`grep -c '^+'` 会把每个文件的 `+++ b/…` 头也算一行（42 个文件就多报 42 行，
+# 曾把 6870 报成 6912）。这里显式排除 +++/--- 头，并把删除行数一起报出来。
+ADD=$(awk '/^\+/ && !/^\+\+\+/{n++} END{print n+0}' "$PATCH")
+DEL=$(awk '/^-/ && !/^---/{n++} END{print n+0}' "$PATCH")
+echo "✓ 补丁已重建：$(grep -c '^diff --git' "$PATCH") 文件，+$ADD -$DEL 行，sha256 $(sha256sum "$PATCH" | cut -d' ' -f1)"
 
 # 立即自检：MSL 抽取 + 常数一致（这两步正是上次回退时唯一会报警的地方）
 python3 scripts/extract_msl.py src/nvn_mtl.m --dir build/msl_check >/dev/null

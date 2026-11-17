@@ -171,19 +171,17 @@ for p in present:
 for f in allfails:
     print(f'::error::{f}')
 print(f'· 定义 {total_defs} 个、调用点 {total_calls} 个')
-# 定点回归：这几个调用点在 75eb4302 合并时全靠人工补第 6 个实参（patch 不报调用点）。
+# 定点回归：75eb4302 合并时这几个调用点全靠人工补第 6 个实参（patch 不报调用点）；
+# d5cbf7ff 合并时上游删掉了 present_encode_slot/_m4 的 mirror 参数（倒影功能整个移除），
+# 所以 mirror 那条断言随之删除——**不是**漏了，是载体没了（见 docs/DESIGN.md「镜像 / 反射层」）。
 # 数对了还不够——必须确实是 screen=1（画进画布）那条分支，否则画幅/中间图会错。
 SPOT = [
     ('src/nvn_present_fi.inc', 'present_blit_m4(cb, mid, dm.texture, NULL, f->uv[2], f->tab[2], flip, 1)', 1),
     ('src/nvn_present_fi.inc', 'present_blit_m4(cb, src, dr.texture, crop, f->uv[3], f->tab[3], flip, 1)', 1),
     ('src/nvn_mtl.m', 'present_blit(cb, src, dst, crop, flip, 1)', 1),
-    ('src/nvn_mtl.m', 'present_blit(cb, src, mirror, crop, flip, 1)', 1),
     ('src/nvn_mtl.m', 'present_blit(cb, src, s->input, crop, flip, 0)', 1),
     ('src/nvn_mtl.m', 'present_blit_m4(cb, src, dst, crop, g_present_uv[slot], g_present_args, flip, 1)', 1),
     ('src/nvn_mtl.m', 'present_blit_m4(cb, src, s->input, crop, s->cropUV, s->cropTable, flip, 0)', 1),
-    # ios/play_reflection.m：镜像/反射层跟着游戏层的格式与色彩空间走（上游 11-13），EDR 开关不跟 ⇒
-    #   HDR 下这块层按 SDR 合成、镜像里 >1 的高光被钳。这一行是我们补的，必须还在。
-    ('src/play_reflection.m', 'if (m.wantsExtendedDynamicRangeContent!=game.wantsExtendedDynamicRangeContent)', 1),
 ]
 for rel, needle, want in SPOT:
     f = ROOT / rel

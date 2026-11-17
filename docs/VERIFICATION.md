@@ -7,12 +7,12 @@
 
 ```bash
 ./run_all.sh                      # 不需要 S2Arm 树：自检 + 敏感度 + 曲线图
-./run_all.sh /tmp/v08             # 额外：把补丁打进干净 75eb430240da 树跑三十套单测（885 项）
+./run_all.sh /tmp/v09             # 额外：把补丁打进干净 d5cbf7ff53f7 树跑 31 套单测（904 项）
 ```
 
 `run_all.sh` 返回 0 才算通过。步骤：`0/5` 量化报告 → `1/5` 参考 CLI → `2/5` HUD 平台区 →
 `3/5` 曲线图 → `3b/5` 平台阶 → `4/5` 补丁自洽 + 十四套单测 → `0g/5` 消融 → `0h/5` 转场序列 →
-`0i/5` 每帧开销（实测控制器一次调用 0.57 µs，上限 5 µs）→ `0j/5` 对照图（12 张图的指纹清单）→ `0k/5` BT.2408 放置方式 → `0l/5` 画幅与黑边 → `0m/5` GPU/CPU 分箱对账 → `0n/5` L0 分位对账 → `0o/5` 上屏 shader 对账 → `0p/5` 运行期 headroom → `0q/5` 回读控制流 → `0u/5` knee 发布/消费 → `0v/5` 图像级用例 → `0w/5` 颜色保真 → `0e7/5` ASan+UBSan（31 套 15s）→ `0w7/5` 基线一致 → `0w8/5` README 与仓库一致（引用的路径都存在、10 个入口脚本都被写进 README）→ `0w9/5` 调用点实参个数（16 个定义 / 67 个调用点，跨文件合并定义表）。 → `0w10/5` `hdr_hist_l1` 逐行对账（MSL 的 float 累加 vs CPU 的 double：avg 差 5.96e-07 stop、white 同格、scene 0.66 stop 两版都是 31.1%；**已知差异**：GPU 侧没有 HUD 簇剔除，HUD 画面白点被顶格拉到 13.24 ⇒ hi 打满 2.0 ⇒ 这条 fallback 等于不扩张）。 → `0w11/5` 设备侧代码登记完整（13 项：12 项有对账、1 项写明理由；新增 kernel 不登记就红；`docs/DEVICE-ONLY.md` 由脚本生成并 `--check` 挡漂移）→ `0w12/5` 补帧运动估计的域（`tools/fi_domain` 实测：静止判定在 16F 线性域只有 44–64% 命中、转回编码域回到 100%，见 `docs/FI-DOMAIN.md`）→ `0w13/5` 换格式后上游隐含假设（11 条结构断言 + `docs/UPSTREAM-ASSUMPTIONS.md`）。
+`0i/5` 每帧开销（实测控制器一次调用 0.57 µs，上限 5 µs）→ `0j/5` 对照图（12 张图的指纹清单）→ `0k/5` BT.2408 放置方式 → `0l/5` 画幅与黑边 → `0m/5` GPU/CPU 分箱对账 → `0n/5` L0 分位对账 → `0o/5` 上屏 shader 对账 → `0p/5` 运行期 headroom → `0q/5` 回读控制流 → `0u/5` knee 发布/消费 → `0v/5` 图像级用例 → `0w/5` 颜色保真 → `0e7/5` ASan+UBSan（31 套 15s）→ `0w7/5` 基线一致 → `0w8/5` README 与仓库一致（引用的路径都存在、10 个入口脚本都被写进 README）→ `0w9/5` 调用点实参个数（16 个定义 / 63 个调用点，跨文件合并定义表）。 → `0w10/5` `hdr_hist_l1` 逐行对账（MSL 的 float 累加 vs CPU 的 double：avg 差 5.96e-07 stop、white 同格、scene 0.66 stop 两版都是 31.1%；**已知差异**：GPU 侧没有 HUD 簇剔除，HUD 画面白点被顶格拉到 13.24 ⇒ hi 打满 2.0 ⇒ 这条 fallback 等于不扩张）。 → `0w11/5` 设备侧代码登记完整（13 项：12 项有对账、1 项写明理由；新增 kernel 不登记就红；`docs/DEVICE-ONLY.md` 由脚本生成并 `--check` 挡漂移）→ `0w12/5` 补帧运动估计的域（`tools/fi_domain` 实测：静止判定在 16F 线性域只有 44–64% 命中、转回编码域回到 100%，见 `docs/FI-DOMAIN.md`）→ `0w13/5` 换格式后上游隐含假设（13 条结构断言 + `docs/UPSTREAM-ASSUMPTIONS.md`）→ `0w14/5` 补丁统计三处一致（README / VERIFICATION / PR 里写的文件数、±行数、sha256 必须等于对 `patch/hdr-auto-l1.patch` 的现算，见 `docs/PATCH-STATS.md`）
 
 它不做的事：
 编译 MSL、编译 ObjC、链接、真机——见文末。
@@ -28,15 +28,15 @@
 
 | 结论 | 命令 | 期望 |
 |---|---|---|
-| 补丁能在干净 `75eb430240da` 上无冲突应用 | `git apply --check patch/hdr-auto-l1.patch`（在干净树） | 0 退出；41 个文件 |
-| 补丁文件指纹 | `sha256sum patch/hdr-auto-l1.patch` | `8ecb6d9b…`（23 文件，+3650 行） |
+| 补丁能在干净 `d5cbf7ff53f7` 上无冲突应用 | `git apply --check patch/hdr-auto-l1.patch`（在干净树） | 0 退出；42 个文件 |
+| 补丁文件指纹 | `sha256sum patch/hdr-auto-l1.patch` | `01279870…`（42 文件，+6870 −26 行） |
 | MSL 能按 Makefile 规则嵌入 | `python3 graphics/metal/tools/embed_msl.py graphics/nvn/shaders/hdr_hist.metal k_hdr_hist out.h` | 7,948 B |
 
 上游跟随：`./scripts/check_upstream.sh` 会同时报**默认分支**与**最新 tag**，并以默认分支上能否干净打上为准
 （只看 tag 会得出「没前进」的错结论：2026-11-16 tag 仍是 v0.4.0，而 `main` 已是 `2b5aca92`，前进 353 个提交）。
 该分支上补丁可干净打上，`./run_all.sh <该树>` 全过。
 
-补丁落点自检：`scripts/check_landing.py <树根>` **49 项**——能打上不等于插对地方。逐处断言注入仍落在
+补丁落点自检：`scripts/check_landing.py <树根>` **56 项**——能打上不等于插对地方。逐处断言注入仍落在
 预期函数体内（`hdr_head_tick()` 必须出现在 `present_blit` 与 `present_blit_m4` 里、`knee` 走
 `uv[8..11]`、`nvn_hdr_hist.inc` 只 include 一次、EDR 上界只在 `hdr_head_tick` 读一次、Makefile 的
 `GENH` 与两个构建依赖文件都在）。`verify.sh` 与 `run_all.sh` 第 4 步都会调它。
@@ -46,7 +46,7 @@
 `verify.sh` 现在也自带同样的下限）。
 
 实测（2026-11-16）：在 `main`（`2b5aca92`，比 v0.4.0 前进 353 个提交）的干净 sparse 树上
-`./verify.sh <该树>` —— 补丁干净打上、**31 套全过**、落点自检 49 项全过。同一天上游又前进到
+`./verify.sh <该树>` —— 补丁干净打上、**31 套全过**、落点自检 56 项全过。同一天上游又前进到
 `ddfef415`，`check_upstream.sh` 复核仍能干净打上（行为未重跑，因为上游还在动）。
 `./scripts/verify_upstream.sh [提交号]` 把上面这套在上游当前头上从零跑一遍（取 HEAD → sparse 克隆 →
 `verify.sh`），实测 `1c31fdc005cf` 通过；结论只对那一个提交成立，所以它会把提交号打出来。

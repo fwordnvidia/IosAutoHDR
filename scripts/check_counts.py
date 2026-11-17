@@ -81,6 +81,10 @@ def main():
         print("::error::统计断言总数时出问题：" + "、".join(bad))
         return 1
     size = msl_bytes()
+    if "--print" in sys.argv:
+        # 给 scripts/make_dist.sh 用：交付说明里的数字必须现算，不能从文档抄（抄过一次就漂）。
+        print("%d %d %s" % (n_suites, n_items, size if size else "-"))
+        return 0
     problems = []
     for doc in DOCS:
         path = os.path.join(HERE, doc)

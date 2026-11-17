@@ -97,7 +97,7 @@ t_hdr_auto_l1 92 项 → 全过     # 白点 / 黑场 / 场景 / 边界
 t_hdr_pipeline 68 项 → 全过    # 端到端：合成帧、色相、峰值、稳态收敛
 ```
 
-在**干净的 `75eb430240da` 树**上 `git apply` rc=0，三条全绿（见 `verify.sh`）。
+在**干净的 `d5cbf7ff53f7` 树**上 `git apply` rc=0，三条全绿（见 `verify.sh`）。
 
 ## 6.5 GPU 侧：L1 已经能用一条 kernel 算完
 
@@ -679,9 +679,16 @@ compute kernel 里做等于把 256 格扫三遍。真要让 GPU 算 knee 时再�
 **推论**：整窗截图（`grab_present`）截的是**游戏画面**而不是扩张后的 HDR 画面——这是刻意的，
 autoplayer 拿它和游戏自己的画面比对；HDR 的扩张只发生在画布那一步。
 
-## 镜像 / 反射层（`ios/play_reflection.m`，补丁唯一触及 ios/ 的一行）
+## 镜像 / 反射层（`ios/play_reflection.m`）——上游 11-17 已删除该功能，本补丁不再触及
 
-iOS 的「对称视图 / 反射」用第二块 `CAMetalLayer` 出同一帧。上游 11-13 让它跟随游戏层：
+**结论先说**：这条改动在基线 `d5cbf7ff`（2026-11-17）之后不再存在，因为上游把下区倒影功能
+整个删掉了（`ios/play_reflection.m` 从 152 行缩到 64 行，注释写明「11-17：下区的倒影（第二个
+CAMetalLayer，渲染器每次上屏同画一份，上面盖模糊与渐暗）连同模糊 / 渐暗一起去掉」；
+全树 `s2a_ios_reflection_drawable` 零命中）。所以补丁现在**全部落在 `graphics/` 内**。
+
+保留这段是为了记住问题本身，因为它对任何「有第二块上屏层」的宿主都成立：
+
+iOS 的「对称视图 / 反射」用第二块 `CAMetalLayer` 出同一帧。旧上游让它跟随游戏层：
 
 ```objc
 if (m.pixelFormat!=game.pixelFormat) m.pixelFormat=game.pixelFormat;
@@ -690,7 +697,12 @@ if (m.colorspace!=game.colorspace) m.colorspace=game.colorspace;
 
 HDR 把游戏层换成 `RGBA16Float` + `kCGColorSpaceExtendedLinearSRGB`，这两行会让镜像层也变成
 16F 线性——但 `wantsExtendedDynamicRangeContent` 没跟。少了它，系统按 **SDR** 合成那块层，
-镜像画面里 >1 的高光被钳回 1.0（主屏正常）。所以补丁在第三行补上同一句，让两个层对亮度
-达成一致。断言：`check_callsites.py` 的 `SPOT` 里有一条数它。
+镜像画面里 >1 的高光被钳回 1.0（主屏正常、不黑屏、不报错）。当时补的第三行是：
 
-这是补丁**唯一**改到 `graphics/` 以外的地方，理由写在 `docs/PR.md`「触及范围」一节。
+```objc
+if (m.wantsExtendedDynamicRangeContent!=game.wantsExtendedDynamicRangeContent) m.wantsExtendedDynamicRangeContent=game.wantsExtendedDynamicRangeContent;
+```
+
+教训：**「跟随格式」和「跟随亮度语义」是两件事**。像素格式与色彩空间对齐之后，EDR 开关仍要显式跟，
+否则 16F 的数值会被当成 SDR 内容合成。以后若上游以别的形式恢复第二上屏层（或宿主自己加），
+这一条立刻适用。

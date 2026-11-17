@@ -1,13 +1,13 @@
 # 给上游的 PR 说明（可直接粘贴）
 
 > 目标仓库：`jhaizhou-ops/S2Arm`（Apache-2.0）。本目录不是上游源码，而是**一个补丁包**：
-> `patch/hdr-auto-l1.patch` 基于 `main` 的 `75eb430240dae472ec834f98b47194d7ff2ff7e5`（2026-11-16）制作。
+> `patch/hdr-auto-l1.patch` 基于 `main` 的 `d5cbf7ff53f75b6132b17ce3a442d431bbbc8726`（2026-11-17）制作。
 > 更早的版本基于 `v0.4.0`（`dcd05e5fa84c8c5c68b6ba66e3b1c6de016636ae`），基线迁移时把 8 处补帧改动
 > 重放到上游新版 `nvn_present_fi.inc` 与 `nvn_mtl.m`（上游在这两个文件里新增了 `fi_may_take_drawable()`、
 > `s2a_cpatch_present_aspect()` 自适应画幅等，共 256 行），重放后反向摘除逐字节还原为上游原文。
 >
 > 合入目标应是默认分支：已实测它能**干净地打到 `main`（`0db515053e07`）**，并在那棵树上跑通
-> 31 套单测 904 项 + 落点自检 49 项 + MSL/常数核对。上游仍在自己前进（同日实测通过的还有
+> 31 套单测 904 项 + 落点自检 56 项 + MSL/常数核对。上游仍在自己前进（同日实测通过的还有
 > `6d01b7897c0d`、`8874b92d071f`、`2237da8ca323`、`3f549467b00d`、`e77fca7b949b`、`b9bd76a202ab`、
 > `1c31fdc0`、`ddfef415`、`2b5aca92`）。上游代码里 HDR/EDR 意图标记
 > 为 0，本补丁是纯增量——`./scripts/check_upstream.sh` 每次都复核这两件事。
@@ -54,11 +54,11 @@ NS2 的《S2Arm》把主机画面直接 blit 到 layer，`host_adapt.m` 里写�
 
 ```sh
 ./scripts/check_upstream.sh          # 补丁还能不能打到最新 tag
-./run_all.sh <干净 v0.4.0 树>         # 打补丁 + 三十套单测 + 嵌入 + 常数一致 + 取 MSL
+./run_all.sh <干净基线树>             # 打补丁 + 31 套单测 + 嵌入 + 常数一致 + 取 MSL
 ./scripts/report_options.py --check   # 47 个常数 / 9 个环境变量 与源码注释逐一对应
 ```
 
-- 三十套单测 **885 条断言**，全部纯 C、`-lm` 即可编，无第三方依赖；
+- 31 套单测 **904 条断言**，全部纯 C、`-lm` 即可编，无第三方依赖；
 - 诊断行格式有 19 条断言（`t_hdr_stat`）：字段名/小数位/截断语义/非有限值打 `n/a`——
   真机三格矩阵的取证全靠这一行，所以它本身也当契约来测；
   参考实现 `hdr_ref --stat-line` 打的是**同一份格式化代码**，所以「设备日志」与「本机复算」
@@ -100,7 +100,20 @@ MSL kernel、ObjC `.inc` 这些只在设备上执行的代码，编译不进本�
 - 每帧开销：控制器一次调用 **0.57 µs**（30/60/120 Hz 相同），占 120 Hz 帧预算 0.007%；
 - 运行期 headroom：每帧读一次 EDR 上界（1% 死区），用户拖亮度/换屏后不再按旧 head 扩张。
 
-## 基线迁移（2026-11-16：`0db51505` → `75eb4302`，371 个提交）
+## 基线迁移（2026-11-17：`75eb4302` → `d5cbf7ff`，1082 个提交）
+
+这次是**上游删功能**带来的合并，不是上下文漂移：
+
+| 上游改动 | 我们要做的事 |
+| --- | --- |
+| `ios/play_reflection.m` 的下区倒影功能**整个删除**（152→64 行，`s2a_ios_reflection_drawable` 全树 0 命中） | 本补丁原来在这里补一行 `wantsExtendedDynamicRangeContent`，现在**删掉**这一处改动（连同 `src/play_reflection.m`、`check_callsites` 的 SPOT 条目、`report_review` 的说明项、`make_patch.sh` 的路径映射）——不是放弃修复，是代码没了 |
+| `present_encode_slot` / `present_encode_m4` 去掉 `id<MTLTexture> mirror` 参数（上游不再向镜像层画第二遍） | 早退行里的 `&& (!mirror \|\| present_blit(…, mirror, …))` 去掉；`hdr_hist_tick`、`#include "nvn_hdr_hist.inc"`、`hdr_dst` 判定块按新结构重新插 |
+| `present_blit` / `present_blit_m4` 签名**未变**（仍带 `int screen`） | 两处 `hdr_head_tick();` 与所有调用点都不用动 |
+
+结果：补丁 **42 文件 / +6870 −26 行 / `sha256 012798703ed19814…`**，`check_landing.py` 56/56、
+`check_callsites.py`（16 定义 / 63 调用点）、`check_format_assumptions.py` 13/13 全过。
+
+### 历史：2026-11-16 `0db51505` → `75eb4302`（371 个提交）
 
 这次不是机械重放，是**结构性合并**——上游给上屏路径加了多屏参数，我们的注入点上下文全失效。
 
@@ -311,14 +324,13 @@ S2A_HDR_FMT=0`，8 位 + 声明 EDR）与上游截图对比来验——这也是
 5. `nvn_present_fi.inc`（与补帧共存，可选）；
 6. `tests/*.c`（每条断言都对应 docs 里的一张表）。
 
-### 触及范围（为什么有一行在 `graphics/` 之外）
+### 触及范围（全部在 `graphics/` 内）
 
-补丁 43 个文件里 42 个在 `graphics/`，另有 `ios/play_reflection.m` **一行**：
+补丁触及的文件全部在 `graphics/` 下（`graphics/nvn/**` 与 `graphics/nvn/shaders/`），
+不改 `ios/`、不改 `runtime/`、不改任何构建脚本的行为。
 
-```objc
-if (m.wantsExtendedDynamicRangeContent!=game.wantsExtendedDynamicRangeContent) m.wantsExtendedDynamicRangeContent=game.wantsExtendedDynamicRangeContent;
-```
-
-上游让镜像/反射层跟随游戏层的像素格式与色彩空间，没有跟 EDR 开关。HDR 开时那块层是
-16F + extended linear 但按 SDR 合成，镜像里的高光被钳。理由与后果写在 `docs/DESIGN.md`
-「镜像 / 反射层」。若维护者不愿改 ios/，把这一行删掉即可：主屏不受影响，只是镜像退回 SDR。
+**历史上的例外已经消失**：本补丁曾给 `ios/play_reflection.m` 补一行
+（`m.wantsExtendedDynamicRangeContent` 跟着游戏层走，否则 HDR 下倒影层 16F + extended linear
+却按 SDR 合成、镜像里 >1 的高光被钳回 1.0）。上游在 11-17 把下区倒影功能**整个删除**
+（`s2a_ios_reflection_drawable` 全树 0 命中，见 `docs/DESIGN.md`「镜像 / 反射层」），
+那一行失去了载体，本补丁随之删掉——不是放弃修复，是代码没了。

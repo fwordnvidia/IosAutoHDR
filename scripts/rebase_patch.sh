@@ -16,6 +16,10 @@ set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd); cd "$ROOT" || exit 1
 PATCH=patch/hdr-auto-l1.patch
 UP=${S2A_UPSTREAM:-https://github.com/jhaizhou-ops/S2Arm.git}
+# 补丁触及的顶层目录。历史上需要 `ios`（ios/play_reflection.m 曾补过一行 EDR 开关）；上游 11-17
+# 删除倒影功能后补丁已全部落在 graphics/ 内。这里保留 ios 只为「万一将来再触及」时不会表现为
+# 「找不到文件」而不是「冲突」——sparse 多拉一个目录的代价可以忽略。
+SCOPE="graphics runtime tools compat ios"
 VERIFY=0
 
 arg=${1:-}
@@ -39,7 +43,7 @@ if [ "$MODE" != check ]; then
     echo "· 取上游 $sha 的工作树"
     git clone -q --filter=blob:none --no-checkout "$UP" "$workdir/t" || { echo "✗ clone 失败"; exit 1; }
     git -C "$workdir/t" sparse-checkout init --cone >/dev/null 2>&1 || true
-    git -C "$workdir/t" sparse-checkout set graphics runtime tools compat >/dev/null 2>&1 || true
+    git -C "$workdir/t" sparse-checkout set $SCOPE >/dev/null 2>&1 || true
     git -C "$workdir/t" fetch -q --filter=blob:none origin "$sha" || { echo "✗ fetch 失败"; exit 1; }
     git -C "$workdir/t" checkout -q FETCH_HEAD || { echo "✗ checkout 失败"; exit 1; }
     TREE=$workdir/t
@@ -54,7 +58,7 @@ echo "· 目标树：$TREE  (HEAD $(git -C "$TREE" rev-parse --short HEAD 2>/dev
 [ -d "$TREE/graphics/nvn" ] || { echo "✗ 这棵树里没有 graphics/nvn（sparse 范围不对？）"; exit 1; }
 [ -f "$TREE/graphics/nvn/gfx/nvn/nvn_mtl.m" ] || { echo "✗ 缺 nvn_mtl.m，不是有效目标树"; exit 1; }
 # 目标树必须是干净的：已经打过补丁的树再正向应用必然冲突，那不是「上游冲突」，别让人误会。
-dirty0=$(git -C "$TREE" status --porcelain -- graphics runtime tools compat 2>/dev/null | head -3)
+dirty0=$(git -C "$TREE" status --porcelain -- $SCOPE 2>/dev/null | head -3)
 if [ -n "$dirty0" ]; then
     echo "✗ 这棵树有未提交改动（可能已经打过补丁）："
     echo "$dirty0" | sed 's/^/    /'
@@ -76,6 +80,8 @@ finish() {  # $1=说明
 # ---- 正向 ----
 cd "$TREE" || exit 1
 before=$(git rev-parse HEAD)
+# 入口时树脏不脏，决定失败后能不能替用户回退（脏树 reset --hard 会毁掉别人的未提交改动）
+pre_dirty=$(git status --porcelain | head -1)
 if ! patch -p1 --forward --no-backup-if-mismatch -i "$ROOT/$PATCH" >/tmp/rebase_fwd.log 2>&1; then
     echo "✗ 正向应用有失败："
     grep -E '^patching file|FAILED|Hunk #[0-9]+ (FAILED|succeeded)' /tmp/rebase_fwd.log | grep -E 'FAILED' | head -20
@@ -89,6 +95,14 @@ if ! patch -p1 --forward --no-backup-if-mismatch -i "$ROOT/$PATCH" >/tmp/rebase_
     fi
     echo
     echo "  含义：上游在这些位置改到与我们重叠，需要按工单逐 hunk 人工合并（不要 --fuzz）。"
+    # 关键：失败路径必须把树恢复原状。曾经不回退，留下「上游 + 半套补丁」的混合树，
+    # 下一次 `--check` 或人肉 grep 会把半套补丁当成上游代码（本轮就误判过 present_blit 已有 hdr_head_tick）。
+    if [ -z "$pre_dirty" ]; then
+        git reset -q --hard "$before" && git clean -qfd $SCOPE
+        echo "  · 已回退：树复原到 $before（无 .rej、无半套补丁）"
+    else
+        echo "  · 树在本次运行前就有未提交改动，未自动回退；请手动 git checkout -- <冲突文件> 后再查"
+    fi
     exit 2
 fi
 offsets=$(grep -cE 'offset [0-9]+ lines' /tmp/rebase_fwd.log || true)
@@ -102,7 +116,7 @@ if ! patch -R -p1 --forward --no-backup-if-mismatch -i "$ROOT/$PATCH" >/tmp/reba
     grep -E 'FAILED' /tmp/rebase_rev.log | head -10
     exit 3
 fi
-dirty=$(git status --porcelain -- graphics runtime tools compat 2>/dev/null | head -20)
+dirty=$(git status --porcelain -- $SCOPE 2>/dev/null | head -20)
 if [ -n "$dirty" ]; then
     echo "✗ 反向撤销后树不是原样，以下路径仍有改动（重放丢了内容或引入了多余改动）："
     echo "$dirty" | sed 's/^/    /'
@@ -113,7 +127,7 @@ echo "· 双向守卫通过：正向 $files 个文件、反向撤销后 \`git st
 # ---- 再来一次正向，留作产物 ----
 patch -p1 --forward --no-backup-if-mismatch -i "$ROOT/$PATCH" >/tmp/rebase_fwd2.log 2>&1 || { echo "✗ 第二次正向失败"; exit 2; }
 out="patch/hdr-auto-l1.$(git rev-parse --short HEAD).patch"
-git add -A graphics runtime tools compat 2>/dev/null
+git add -A $SCOPE 2>/dev/null
 git diff --cached > "$ROOT/$out"
 git reset -q
 sha256=$(sha256sum "$ROOT/$out" | cut -d' ' -f1)

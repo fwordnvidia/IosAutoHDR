@@ -50,3 +50,35 @@ f->uv[2], f->tab[2], flip)` 这条调用，以及与 `present_blit` 同处的 `h
 `patch/BASELINE` 钉在 `0db51505`，任何人 clone 那个提交 + `git apply` 都是 rc=0、885 项全过。
 上游前进只影响「直接对着最新 main 应用」这一个场景，而那个场景有 `./scripts/rebase_patch.sh`
 先跑一遍：成功就直接给候选补丁并双向验证无损；失败就出工单，不会产出一个半对的补丁。
+
+## 2026-11-17 实测：基线 `75eb4302` → 上游头 `d5cbf7ff`（**1082 个提交**）
+
+```
+patch/hdr-auto-l1.patch 正向应用：42 个文件里 2 个失败
+  graphics/nvn/gfx/nvn/nvn_mtl.m            9 hunk 中 3 个 FAILED（#7 #8 #9）
+  ios/play_reflection.m                     1 hunk 中 1 个 FAILED（#1）
+```
+
+### 根因：上游**删功能**，不是参数漂移
+
+| 上游 `d5cbf7ff` 做了什么 | 我们的注入点怎么了 |
+| --- | --- |
+| 下区倒影（第二个 `CAMetalLayer` + 模糊 + 渐暗）**整个删除**：`ios/play_reflection.m` 152 → 64 行，全树 `s2a_ios_reflection_drawable` **0 命中** | 我们在这里补的 `wantsExtendedDynamicRangeContent` 跟随**没有载体了**。这不是「修不了」，是代码没了 ⇒ 把这一处改动从补丁里删掉，连带删 `src/play_reflection.m`、`check_callsites` 的 SPOT 条目、`report_review` 的说明项、`make_patch.sh` 的路径映射 |
+| `present_encode_slot` / `present_encode_m4` 去掉 `id<MTLTexture> mirror` 参数（上游不再「同画一份到镜像层」） | 我们的早退行 `if (…) return present_blit(cb, src, dst, crop, flip, 1) && (!mirror || present_blit(cb, src, mirror, …));` 里的第二遍要删掉，只留 dst |
+| `present_blit` / `present_blit_m4` 签名**没变**（仍带 `int screen`） | 两处 `hdr_head_tick();` 与全部调用点都不用动 |
+
+### 合并方式
+
+`nvn_mtl.m` 四处手工插入（每次替换都断言「匹配恰好 1 次」）：`#include "nvn_hdr_hist.inc"`
+（`rs_aa_crop` 的 `}` 之后）、`hdr_hist_tick(cb, src);`（`present_options();` 之后）、`hdr_dst`
+判定块（`BOOL flip = …` 之后）、`if (!dr)` 的降级/回头路大块。结果：补丁 42 文件 /
++6870 −26 行 / `sha256 012798703ed19814…`，`check_landing.py` 56/56、
+`check_callsites.py`（16 定义 / 63 调用点）、`check_format_assumptions.py` 13/13 全过。
+
+### 这一轮买到的教训
+
+1. `rebase_patch.sh` 失败后**必须回退树**——否则留下「上游 + 半套补丁」，下一次读源码会把半套
+   补丁当成上游代码（本轮就误判过 `present_blit` 里已有 `hdr_head_tick()`）。已修。
+2. 冲突列表只报**定义/插入点**，不报调用点；签名变了要自己把所有调用点补齐（2026-11-16 那次
+   的 `int screen` 就是这么漏的）。
+3. 「上游删功能」这种迁移，正确答案是**把改动删掉**，不是硬让它编译过——补丁里不该留死代码。

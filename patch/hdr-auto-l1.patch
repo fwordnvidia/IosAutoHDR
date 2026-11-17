@@ -1,5 +1,5 @@
 diff --git a/graphics/nvn/Makefile b/graphics/nvn/Makefile
-index 10eb9c0a..20dee72a 100644
+index 97f2dce9..f81f3817 100644
 --- a/graphics/nvn/Makefile
 +++ b/graphics/nvn/Makefile
 @@ -16,7 +16,7 @@ AA_MSLH := $(addprefix $(OUT)/gen/nvn_aa_,$(addsuffix .h,$(AA_NAMES)))
@@ -11,7 +11,7 @@ index 10eb9c0a..20dee72a 100644
  SRCS  := $(sort $(wildcard gfx/nvn/*.c gfx/nvn/*.m gfx/nvn/*.S gfx/tex/*.c gfx/tex/*.m gfx/vk/*.m gfx/gl/*.m)) host_adapt.m graphics_session.c   # gfx/vk：Vulkan 款（直连层 hle_vk.m，10-24 搬入）
  HDRS  := $(wildcard gfx/nvn/*.h gfx/nvn/*.inc gfx/nvn/include/*.h gfx/tex/*.h gfx/vk/*.h gfx/vk/*.inc gfx/gl/*.h host/*.h host/*.inc) graphics_session.h ../track/s2a_track.h texture_extent.inc widen_glue.inc widen_fallback.inc fe_stat.h lib_pack.inc lib_pack_core.inc $(ROOT)/graphics/widen/export/s2a_widen.h $(ROOT)/graphics/metal/fit_judge.h $(ROOT)/runtime/src/native.h $(ROOT)/runtime/include/s2a_gfx_mode.h $(AA_MSLH) $(AA_LUTH) $(GENH)
  # 源 / 头清单戳（11-05 合入运维线：门禁常驻工作树跨批增量编，某批分支删 / 改名一个源文件后，余下源都比库旧、库不重建，
-@@ -38,6 +38,9 @@ IOS_FLAGS := -arch arm64 -isysroot $(IOS_SDK) -mios-version-min=$(IPHONEOS_DEPLO
+@@ -63,6 +63,9 @@ GLSLANG_RID ?= ios-arm64
  mac: $(OUT)/mac/libnvn.a
  ios: $(OUT)/ios/libnvn.a
  
@@ -1685,10 +1685,10 @@ index 00000000..a001187a
 +
 +#endif
 diff --git a/graphics/nvn/gfx/nvn/nvn_mtl.m b/graphics/nvn/gfx/nvn/nvn_mtl.m
-index 2f4b6491..71f60c0e 100644
+index c32e6b01..d77e6cd1 100644
 --- a/graphics/nvn/gfx/nvn/nvn_mtl.m
 +++ b/graphics/nvn/gfx/nvn/nvn_mtl.m
-@@ -748,7 +748,7 @@ void mtl_init(void) {
+@@ -817,7 +817,7 @@ void mtl_init(void) {
          g_present_args = [g_dev newArgumentTableWithDescriptor:pad error:&ate];
          if (!g_present_args) MDIE("failed to create the present argument table: %s", ate.localizedDescription.UTF8String);
          for (int i = 0; i < 3; i++) {
@@ -1697,7 +1697,7 @@ index 2f4b6491..71f60c0e 100644
              if (!g_present_uv[i]) MDIE("failed to create present UV buffer[%d]", i);
              res_add(g_present_uv[i]);
          }
-@@ -17022,17 +17022,139 @@ id<CAMetalDrawable> s2a_ios_reflection_drawable(CAMetalLayer *game) __attribute_
+@@ -17595,17 +17595,139 @@ static CAMetalLayer *g_present_layer_resident;
  #endif
  void mtl_present_test_stall(uint64_t ns) { g_present_stall_ns = ns; }
  #include "nvn_present_aa.inc"
@@ -1838,7 +1838,7 @@ index 2f4b6491..71f60c0e 100644
          if (!lib) MDIE("present shader compile failed %s", e.localizedDescription.UTF8String);
          MTLRenderPipelineDescriptor *pd = [MTLRenderPipelineDescriptor new];
          pd.vertexFunction = [lib newFunctionWithName:@"vs"]; pd.fragmentFunction = [lib newFunctionWithName:@"fs"];
-@@ -17063,6 +17185,7 @@ static id<MTLTexture> present_raw_src(id<MTLTexture> src) {
+@@ -17636,6 +17758,7 @@ static id<MTLTexture> present_raw_src(id<MTLTexture> src) {
  __attribute__((weak)) double s2a_cpatch_present_aspect(void) { return 0; }   // native runtime/src/cpatch.c: current aspect while an adaptive community widescreen patch is on; graphics unit tests without the host have none
  #include "nvn_present_fit.h"   // pf_crop_fit (present_now) / pf_viewport (both blits); plain C, tested by graphics/nvn/tests/t_present_fit.c
  static int present_blit(id<MTLCommandBuffer> cb, id<MTLTexture> src, id<MTLTexture> dst, const int crop[4], BOOL flip, int screen) {
@@ -1846,7 +1846,7 @@ index 2f4b6491..71f60c0e 100644
      NSUInteger cx = 0, cy = 0, cw = src.width, ch = src.height;
      if (crop && (crop[2] || crop[3])) {
          if (crop[0] < 0 || crop[1] < 0 || crop[2] <= 0 || crop[3] <= 0 ||
-@@ -17093,8 +17216,12 @@ static int present_blit(id<MTLCommandBuffer> cb, id<MTLTexture> src, id<MTLTextu
+@@ -17666,8 +17789,12 @@ static int present_blit(id<MTLCommandBuffer> cb, id<MTLTexture> src, id<MTLTextu
      id<MTLRenderCommandEncoder> en = [cb renderCommandEncoderWithDescriptor:rp];
      [en setViewport:vp];
      [en setRenderPipelineState:g_blit_pso]; [en setFragmentTexture:present_raw_src(src) atIndex:0]; [en setFragmentSamplerState:g_blit_samp atIndex:0];
@@ -1861,7 +1861,7 @@ index 2f4b6491..71f60c0e 100644
      if (flip) { uv[1] += uv[3]; uv[3] = -uv[3]; }   // lower-left origin: the window image is stored bottom-up
      [en setFragmentBytes:uv length:sizeof uv atIndex:0];
      [en drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
-@@ -17102,6 +17229,7 @@ static int present_blit(id<MTLCommandBuffer> cb, id<MTLTexture> src, id<MTLTextu
+@@ -17675,6 +17802,7 @@ static int present_blit(id<MTLCommandBuffer> cb, id<MTLTexture> src, id<MTLTextu
      return 1;
  }
  static int present_blit_m4(id<MTL4CommandBuffer> cb, id<MTLTexture> src, id<MTLTexture> dst, const int crop[4], id<MTLBuffer> uvBuffer, id table, BOOL flip, int screen) {
@@ -1869,7 +1869,7 @@ index 2f4b6491..71f60c0e 100644
      NSUInteger cx = 0, cy = 0, cw = src.width, ch = src.height;
      if (crop && (crop[2] || crop[3])) {
          if (crop[0] < 0 || crop[1] < 0 || crop[2] <= 0 || crop[3] <= 0 ||
-@@ -17130,6 +17258,13 @@ static int present_blit_m4(id<MTL4CommandBuffer> cb, id<MTLTexture> src, id<MTLT
+@@ -17703,6 +17831,13 @@ static int present_blit_m4(id<MTL4CommandBuffer> cb, id<MTLTexture> src, id<MTLT
      float *uv = uvBuffer.contents;
      uv[0] = (float)cx / src.width; uv[1] = (float)cy / src.height; uv[2] = (float)cw / src.width; uv[3] = (float)ch / src.height;
      uv[4] = (cx + 0.5f) / src.width; uv[5] = (cy + 0.5f) / src.height; uv[6] = (cx + cw - 0.5f) / src.width; uv[7] = (cy + ch - 0.5f) / src.height;
@@ -1883,43 +1883,42 @@ index 2f4b6491..71f60c0e 100644
      if (flip) { uv[1] += uv[3]; uv[3] = -uv[3]; }   // normalized AA input is already upright
      tab_buf(table, uvBuffer, 0, 0);
      [en setViewport:vp]; [en setRenderPipelineState:g_blit_pso];
-@@ -17155,11 +17290,17 @@ static const int *rs_aa_crop(id<MTLTexture> src, id<MTLTexture> dst, const int c
+@@ -17726,11 +17861,17 @@ static const int *rs_aa_crop(id<MTLTexture> src, id<MTLTexture> dst, const int c
+     if (!vw || !vh || vw > w || vh > h || (vw == w && vh == h)) return crop;
+     tmp[0] = tmp[1] = 0; tmp[2] = (int)vw; tmp[3] = (int)vh; return tmp;
  }
- // mirror (iOS split-view reflection, may be nil): the final picture drawn a second time into the small reflection drawable,
- //   by the same blit with the same inputs as the one into dst (ios/play_reflection.m s2a_ios_reflection_drawable)
 +#include "nvn_hdr_hist.inc"   // 自动 HDR：每 8 帧一次 直方图 → L1 → g_hdr_knee（S2A_HDR_AUTO=1 才真跑）
- static int present_encode_slot(id<MTLCommandBuffer> cb, id<MTLTexture> src, id<MTLTexture> dst, id<MTLTexture> mirror, const int crop[4], int slot) {
+ static int present_encode_slot(id<MTLCommandBuffer> cb, id<MTLTexture> src, id<MTLTexture> dst, const int crop[4], int slot) {
      present_options();
 +    hdr_hist_tick(cb, src);
      BOOL flip = atomic_load_explicit(&g_origin_ll, memory_order_relaxed) != 0;
 -    NvPresentFX *fx = present_fx_for(slot, src, dst, crop, NO);
--    if (!g_present_aa && !fx) return present_blit(cb, src, dst, crop, flip, 1) && (!mirror || present_blit(cb, src, mirror, crop, flip, 1));
+-    if (!g_present_aa && !fx) return present_blit(cb, src, dst, crop, flip, 1);
 +    // HDR 画布（16F）：AA / MetalFX 空间放大的内部图与上屏管线仍是 8 位，直接叠上去会管线/画布不匹配。
 +    //   本轮先按「不启用」处理并告警一次；16F 版的 AA / 放大留到下一步（见 hdr-auto/docs/DESIGN.md 未做项）
 +    int hdr_dst = (dst && dst.pixelFormat == MTLPixelFormatRGBA16Float);
 +    if (hdr_dst && (g_present_aa || g_present_fx)) { static int once; if (!once++) MLOG("【黄】HDR：16F 画布下暂不叠加 AA / MetalFX 空间放大（8 位管线还没做 16F 版）"); }
 +    NvPresentFX *fx = hdr_dst ? NULL : present_fx_for(slot, src, dst, crop, NO);
-+    if ((!g_present_aa || hdr_dst) && !fx) return present_blit(cb, src, dst, crop, flip, 1) && (!mirror || present_blit(cb, src, mirror, crop, flip, 1));
++    if ((!g_present_aa || hdr_dst) && !fx) return present_blit(cb, src, dst, crop, flip, 1);
      id<MTLTexture> out;
      if (g_present_aa) {
          int ac[4]; NvPresentAA *s = present_aa_prepare(slot, src, rs_aa_crop(src, dst, crop, fx, ac));   // rs_aa_crop
-@@ -17186,9 +17327,13 @@ API_AVAILABLE(macos(26.0), ios(26.0))
- static int present_encode_m4(id<MTL4CommandBuffer> cb, id<MTLTexture> src, id<MTLTexture> dst, id<MTLTexture> mirror, const int crop[4], int slot) {
+@@ -17757,8 +17898,12 @@ API_AVAILABLE(macos(26.0), ios(26.0))
+ static int present_encode_m4(id<MTL4CommandBuffer> cb, id<MTLTexture> src, id<MTLTexture> dst, const int crop[4], int slot) {
      present_options();
      BOOL flip = atomic_load_explicit(&g_origin_ll, memory_order_relaxed) != 0;
 -    NvPresentFX *fx = present_fx_for(slot, src, dst, crop, YES);
+-    if (!g_present_aa && !fx) return present_blit_m4(cb, src, dst, crop, g_present_uv[slot], g_present_args, flip, 1);
 +    // HDR 画布（16F）：AA / MetalFX 空间放大的内部图与上屏管线仍是 8 位，直接叠上去会管线/画布不匹配。
 +    //   本轮先按「不启用」处理并告警一次；16F 版的 AA / 放大留到下一步（见 hdr-auto/docs/DESIGN.md 未做项）
 +    int hdr_dst = (dst && dst.pixelFormat == MTLPixelFormatRGBA16Float);
 +    if (hdr_dst && (g_present_aa || g_present_fx)) { static int once; if (!once++) MLOG("【黄】HDR：16F 画布下暂不叠加 AA / MetalFX 空间放大（8 位管线还没做 16F 版）"); }
 +    NvPresentFX *fx = hdr_dst ? NULL : present_fx_for(slot, src, dst, crop, YES);
-     // The mirror blit writes the same values into the same parameter buffer / table as the blit before it
--    if (!g_present_aa && !fx) return present_blit_m4(cb, src, dst, crop, g_present_uv[slot], g_present_args, flip, 1) && (!mirror || present_blit_m4(cb, src, mirror, crop, g_present_uv[slot], g_present_args, flip, 1));
-+    if ((!g_present_aa || hdr_dst) && !fx) return present_blit_m4(cb, src, dst, crop, g_present_uv[slot], g_present_args, flip, 1) && (!mirror || present_blit_m4(cb, src, mirror, crop, g_present_uv[slot], g_present_args, flip, 1));
++    if ((!g_present_aa || hdr_dst) && !fx) return present_blit_m4(cb, src, dst, crop, g_present_uv[slot], g_present_args, flip, 1);
      id<MTLTexture> out;
      if (g_present_aa) {
          int ac[4]; NvPresentAA *s = present_aa_prepare(slot, src, rs_aa_crop(src, dst, crop, fx, ac));   // rs_aa_crop
-@@ -17353,7 +17498,47 @@ static int present_now(const tex_t *t, double period, uint64_t frame, uint64_t t
+@@ -17923,7 +18068,47 @@ static int present_now(const tex_t *t, double period, uint64_t frame, uint64_t t
      uint64_t dt0 = now_ns();
      id<CAMetalDrawable> dr = supplied ? supplied : [layer nextDrawable];
      if (!supplied) g_drawable_ns += now_ns() - dt0;
@@ -1965,9 +1964,9 @@ index 2f4b6491..71f60c0e 100644
 +        s2a_hdr_fmt_guard_step(&g_hdr_fmt_guard, 1, is16);
 +        if (is16) { g_hdr_want16 = 1; s2a_hdr_fmt_guard_ok(&g_hdr_fmt_guard); }   // 16F 稳了：退避复位
 +    }
-     // iOS split view: the lower-area reflection gets this frame too, drawn in this same present (nil when it is not showing)
- #if TARGET_OS_IPHONE
-     id<CAMetalDrawable> mdr = s2a_ios_reflection_drawable ? s2a_ios_reflection_drawable(layer) : nil;
+     int alloc_i = (int)(ticket % 3);
+     present_options();
+     if (g_present_aa || g_present_fx) {
 diff --git a/graphics/nvn/gfx/nvn/nvn_present_fi.inc b/graphics/nvn/gfx/nvn/nvn_present_fi.inc
 index b8a27bf1..93be56b2 100644
 --- a/graphics/nvn/gfx/nvn/nvn_present_fi.inc
@@ -2119,7 +2118,7 @@ index b8a27bf1..93be56b2 100644
      if (dr && fi_commit(f, 2, dr, ^int(id cb) { return present_blit_m4(cb, src, dr.texture, crop, f->uv[3], f->tab[3], flip, 1); }, ^(int ok) { (void)ok; fi_ticket_done(ticket); })) {
  #if !TARGET_OS_SIMULATOR
 diff --git a/graphics/nvn/host_adapt.m b/graphics/nvn/host_adapt.m
-index cd6ae412..8379a88a 100644
+index 0677df12..3bd8848b 100644
 --- a/graphics/nvn/host_adapt.m
 +++ b/graphics/nvn/host_adapt.m
 @@ -14,6 +14,7 @@
@@ -7344,19 +7343,3 @@ index 00000000..3fc5eb5c
 +           fails ? "✗" : "✓", checks, fails ? "有失败" : "全过", fails);
 +    return fails != 0;
 +}
-diff --git a/ios/play_reflection.m b/ios/play_reflection.m
-index 5430270d..b451175c 100644
---- a/ios/play_reflection.m
-+++ b/ios/play_reflection.m
-@@ -107,6 +107,11 @@ id<CAMetalDrawable> s2a_ios_reflection_drawable(CAMetalLayer *game) {
-     if (m.device!=game.device) m.device=game.device;   // The renderer sets these on the game layer after it is attached
-     if (m.pixelFormat!=game.pixelFormat) m.pixelFormat=game.pixelFormat;
-     if (m.colorspace!=game.colorspace) m.colorspace=game.colorspace;
-+    // S2Arm HDR：像素格式与色彩空间跟着游戏层走了，EDR 开关却没跟——16F drawable + extended linear
-+    //   colorspace 但 wantsExtendedDynamicRangeContent 仍是 NO，系统按 SDR 合成这块镜像，
-+    //   镜像画面里 >1 的高光被钳回 1.0（主屏正常）。这一行少不得：HDR 与「对称视图/反射」同开时
-+    //   只有它能让两个层说同一种亮度语言。（像素格式那一行是上游 11-13 加的，见上方注释）
-+    if (m.wantsExtendedDynamicRangeContent!=game.wantsExtendedDynamicRangeContent) m.wantsExtendedDynamicRangeContent=game.wantsExtendedDynamicRangeContent;
-     id<CAMetalDrawable> d=m.device ? [m nextDrawable] : nil;
-     void (^done)(void)=^{ pthread_mutex_lock(&g_mu); if (g_inflight>0) g_inflight--; pthread_mutex_unlock(&g_mu); };
-     if (!d) { done(); return nil; }

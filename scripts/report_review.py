@@ -23,14 +23,6 @@ DOC = os.path.join(HERE, "docs", "REVIEW.md")
 # 文件 → (一句话职责, 不加会怎样, 守护它的测试套件)
 # 顺序即建议阅读顺序：算法核心 → 设备接线 → 宿主/格式 → 对账 → 工具。
 INFO = {
-    "play_reflection.m": (
-        "镜像/反射层跟随游戏层的像素格式与色彩空间（上游 11-13 已有），本补丁补上 EDR 开关那一行："
-        "16F + extended linear 但 `wantsExtendedDynamicRangeContent` 为 NO 时系统按 SDR 合成，"
-        "镜像里 >1 的高光被钳回 1.0。这是补丁唯一改到 `graphics/` 以外的文件。",
-        "补丁要覆盖 ios/ 就得连带改 `make_patch.sh` 的 map_path/check_coverage 与 `git add` 范围；"
-        "删掉这一行不影响主屏，只是镜像退回 SDR。",
-        ["check_callsites（SPOT 里数这一行）"],
-    ),
     "nvn_hdr.h": (
         "参数层与全部微积分：`s2a_hdr_to_linear`、`s2a_hdr_itm_*`、`s2a_hdr_grade_rgb`、"
         "`s2a_hdr_clip_head`、`s2a_hdr_status_line`、`s2a_hdr_fmt_guard`、原子 knee 打包。",
@@ -116,16 +108,20 @@ EXTRA = [
 
 
 def patch_files():
-    """补丁涉及的文件（剥掉 `graphics/nvn/` 前缀，只留 basename 用来对应 src/）。"""
-    out = subprocess.run(["git", "apply", "--numstat", PATCH],
-                         cwd=HERE, capture_output=True, text=True)
-    if out.returncode != 0:
-        raise SystemExit("git apply --numstat 失败：%s" % out.stderr.strip())
+    """补丁涉及的文件（只留 basename，用来对应 src/）。
+
+    为什么不用 `git apply --numstat`：那是**相对 cwd** 解析的。本仓库根是 `ios-build`，
+    `hdr-auto/` 是它的子目录，补丁里的路径却是 `graphics/nvn/…`（相对上游树根）——
+    于是每个片段都被「跳过」，numstat 返回 0 行、rc 仍是 0。后果是**静默**的：
+    `missing`（新增文件没写说明）恒空、「stale」把 INFO 里全部条目当过期。
+    这里直接读补丁头，不碰工作区，也不受 cwd 影响。
+    """
     names = []
-    for line in out.stdout.splitlines():
-        parts = line.split("\t")
-        if len(parts) == 3:
-            names.append(parts[2].split("/")[-1])
+    for line in open(PATCH, encoding="utf-8", errors="replace"):
+        if line.startswith("diff --git "):
+            names.append(line.rstrip("\n").split(" b/")[-1].split("/")[-1])
+    if len(names) < 40:          # 真值 42；掉了说明补丁头格式变了或文件被截断，宁红不静默
+        raise SystemExit("补丁里只解析出 %d 个文件（预期 ≥40），补丁头格式变了？" % len(names))
     return names
 
 

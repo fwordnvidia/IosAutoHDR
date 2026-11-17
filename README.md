@@ -8,7 +8,7 @@
 > smoothing stage derive two knee points, and the present shader expands everything above the knee toward the panel's
 > EDR headroom while keeping BT.2087 hue and paper-white luminance fixed. Nine C test suites (458 assertions),
 > a reference CLI plus 20 self-checks run on plain Linux — no Xcode, no device needed. Patch applies cleanly on
-> upstream `75eb430240da` (2026-11-16). Everything is documented in Chinese; code identifiers and comments are bilingual
+> upstream `d5cbf7ff53f7` (2026-11-17). Everything is documented in Chinese; code identifiers and comments are bilingual
 > enough to follow the math.
 >
 > **状态 / Status:** 算法层、C 侧接线、ObjC 语法闸门、上屏 MSL 编译均已通过；**未**做链接级与真机验证
@@ -80,10 +80,16 @@ SpecialK / BT.2087 / BT.2408-8 / Apple EDR / Microsoft scRGB，每条都写「�
 冲突时自动生成 `docs/BASELINE-MIGRATION.md`：每个被拒的 hunk 一节，给出「我们要插入什么（diff）」
 与「上游现在这段是什么（objc）」，行号按 hunk 的上下文锚点在新树里现搜（不用 `.rej` 里记的旧行号）。
 
-实测（2026-11-16）：基线 `0db51505` → 上游 `75eb4302`（371 个提交）时 `nvn_mtl.m` 4/9 hunk 冲突、
-`nvn_present_fi.inc` 1/7 冲突，根因是上游给 `present_blit` 新增 `int screen`（多屏）——属结构性合并，
-已按工单合并完并把基线升到 `75eb430240da`（`verify_upstream.sh` 全过）。合并后上游又前进了几个提交，
-这是常态：**基线只对写明的那个提交成立**。
+实测两次（都是结构性合并，不是文本偏移）：
+
+- **2026-11-16**：`0db51505` → `75eb4302`（371 个提交），上游给 `present_blit` 新增 `int screen`（多屏）；
+  `nvn_mtl.m` 4/9 hunk 冲突、`nvn_present_fi.inc` 1/7 冲突，靠工单 + 手工补第 6 个实参完成。
+- **2026-11-17**：`75eb4302` → `d5cbf7ff53f7`（**1082 个提交**），上游删掉了下区倒影功能
+  （`ios/play_reflection.m` 152→64 行、`s2a_ios_reflection_drawable` 全树 0 命中）并去掉
+  `present_encode_slot`/`_m4` 的 `mirror` 参数；`nvn_mtl.m` 3/9 hunk 冲突，工单 + 四处手工合并完成，
+  同时把本补丁里那条改 `ios/play_reflection.m` 的 EDR 补丁**删掉**（载体没了）。
+
+当前基线 d5cbf7ff53f7（`verify_upstream.sh` 全过）。上游仍在走，这是常态：**基线只对写明的那个提交成立**。
 
 ## 合规（可验证，不是承诺）
 
@@ -101,13 +107,13 @@ SpecialK / BT.2087 / BT.2408-8 / Apple EDR / Microsoft scRGB，每条都写「�
 
 ## 打补丁
 
-目标基线：S2Arm `main` 的 **75eb430240da**（`75eb430240dae472ec834f98b47194d7ff2ff7e5`，2026-11-16；v0.4.0 `dcd05e5` 之后的提交；上一基线 `0db515053e07` 的历史实测仍保留在 docs/PR.md）。
+目标基线：S2Arm `main` 的 **d5cbf7ff53f7**（`d5cbf7ff53f75b6132b17ce3a442d431bbbc8726`，2026-11-17；v0.4.0 `dcd05e5` 之后的提交；上一基线 `75eb430240da`、`0db515053e07` 的历史实测仍保留在 docs/PR.md）。
 注意上游 tag 仍停在 v0.4.0 而 `main` 已前进数百个提交，本补丁对**这一个提交**验证通过，上游再动需重跑 `./scripts/verify_upstream.sh <新 sha>`。
 0.4.0 上游**没有**任何 HDR 代码（`nvn_hdr*` 全缺、全树 `S2A_HDR` 零命中），所以这个补丁是纯新增。
 
 ```bash
 git clone https://github.com/jhaizhou-ops/S2Arm.git s2arm && cd s2arm
-git checkout 75eb430240dae472ec834f98b47194d7ff2ff7e5
+git checkout d5cbf7ff53f75b6132b17ce3a442d431bbbc8726
 git apply -v /path/to/hdr-auto/patch/hdr-auto-l1.patch
 ```
 
@@ -145,7 +151,7 @@ vim src/nvn_hdr.h              # src/ 是唯一真相源
 ✓ t_hdr_robust：下标 / 空直方图 / uint32 溢出 / 垃圾上一帧状态 / 20 万次 fuzz 15 项 → 全过
 ```
 
-补丁本体：`patch/hdr-auto-l1.patch`，**23 文件 +3650 行**（−19），`sha256 8ecb6d9b6d987694abfd7eb623e27553abe2f01ac18b0ccaa1732a169eee81fd`。
+补丁本体：`patch/hdr-auto-l1.patch`，**42 文件 +6870 行**（−26），`sha256 012798703ed198140fdc6719eb13e1dca6860eb3f6c7419f5a34adc8f30c6679`。
 
 补丁同时修了一个会直接编译失败的缺口：`nvn_hdr_hist.inc` 要 `#include "nvn_hdr_hist_msl.h"`，而该基线的 `graphics/nvn/Makefile` 里**没有**生成它的规则（`GENH` 只列 `gal_tess_msl.h`）。补丁补上 `GENH` 条目与 `embed_msl.py` 规则，否则这条链路一被 include 就断。
 
@@ -154,7 +160,7 @@ vim src/nvn_hdr.h              # src/ 是唯一真相源
 | 项 | 状态 |
 |---|---|
 | 参数层（纯 C） | ✅ **904** 条断言（31 套）全绿，可在 Linux/CI 复跑；含四场景 nit 量化（`t_hdr_quality`） |
-| 补丁可打性 | ✅ 干净 `75eb430240da` 树 `git apply` rc=0 |
+| 补丁可打性 | ✅ 干净 `d5cbf7ff53f7` 树 `git apply` rc=0 |
 | MSL 语法 | ✅ CI `hdr-check` 用 `xcrun -sdk iphoneos metal -std=metal3.0 -c` 真编译（第一次就抓出 MSL 无 `double`，已改 float） |
 | 嵌入规则 | ✅ 本机 `embed_msl.py` 产出 7,756 B 头文件 |
 | GPU 侧接线 | ✅ `present_encode_slot` 每 8 帧（`S2A_HDR_HIST_EVERY`）跑 `clear→add→hdr_hist_l1` + blit 1 KB 直方图回 CPU；判定全在 CPU（真直方图），`float4` 只留作对账日志 |
@@ -248,7 +254,7 @@ python3 scripts/to_png.py shot_hdr.ppm shot.png --head 2        # 转成能直�
 
 开发目录里 `build/` 有编译好的二进制、`patch/src.manifest` 有指纹，「在我这儿能跑」不等于
 「别人解包后能跑」。`scripts/consumer_test.sh` 把交付包解到一个空临时目录，检查包里没有 `build/`，
-再在里面从零跑一遍 `run_all.sh`（可选：带一个上游干净树，把补丁打进去跑三十套单测）：
+再在里面从零跑一遍 `run_all.sh`（可选：带一个上游干净树，把补丁打进去跑 31 套单测）：
 
 ```sh
 TARBALL=../hdr-auto-delivery/hdr-auto-<sha>.tar.gz ./scripts/consumer_test.sh          # 只验证包自检
@@ -307,7 +313,7 @@ python3 scripts/report.py     # 改完算法后重新生成
 ## 许可证
 
 本目录是 S2Arm（Apache-2.0）的**补丁与独立参考实现**，不含上游源码：`patch/hdr-auto-l1.patch`
-打在上游 `75eb430240da` 的干净树上。见 [LICENSE](LICENSE) 与 [NOTICE](NOTICE)。
+打在上游 `d5cbf7ff53f7` 的干净树上。见 [LICENSE](LICENSE) 与 [NOTICE](NOTICE)。
 
 `.github/workflows/verify.yml` 是包内 CI：clone 上游 → 打补丁 → 跑全部闸门 + MSL/ObjC 真编译，
 推上 GitHub 或 fork 后可手动触发。
