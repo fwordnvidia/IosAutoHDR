@@ -12,6 +12,11 @@
 #   - 社区档案（GitHub 自己算的 health_percentage）认得我们的 CONTRIBUTING / SECURITY
 #     —— 「仓库里有这个文件」和「GitHub 把它当成社区档案」是两件事：文件名放错目录
 #     （比如放 docs/ 下）文件在、GitHub 不认，仓库页照样提示「添加贡献指南」。
+#     SECURITY.md 还有个第二层：社区档案里的 security_policy 只有在
+#     **私密漏洞报告开关**打开时才非空（`private-vulnerability-reporting` 的 enabled），
+#     而那个开关要 `Administration:write` —— 本机 PAT 没有（PUT 返回 403），只能网页面板点。
+#     所以判据分两层：文件在远端 main 上（我们能保证）＝硬要求；
+#     GitHub 认不认（开关在我们手上之外）＝提示。
 #
 # 只读：本脚本不发任何修改请求。需要网络，所以不进 run_all.sh（那样每跑一次闸门都要出门）。
 #
@@ -115,27 +120,65 @@ else
     echo "  · 当前目录不是 git 仓库，跳过 HEAD 比对（这条只在投影根有意义）"
 fi
 
-echo "=== 社区档案：GitHub 认不认我们的 CONTRIBUTING / SECURITY ==="
+echo "=== 社区档案：文件在不在远端 main、GitHub 认不认 ==="
+# 第一层：文件是否真的在远端 main 上（这一层我们能保证，缺了就是没推）
+python3 - "$REPO" "$PROXY" "$TOKEN" <<'PY'
+import json, subprocess, sys
+repo, proxy, token = sys.argv[1], sys.argv[2], sys.argv[3]
+bad = 0
+for f in ("CONTRIBUTING.md", "SECURITY.md"):
+    cmd = ["curl", "-sS", "-m", "20", "-H", f"Authorization: token {token}",
+           "-H", "Accept: application/vnd.github+json",
+           f"https://api.github.com/repos/{repo}/contents/{f}?ref=main"]
+    if proxy:
+        cmd[1:1] = ["-x", proxy]
+    out = subprocess.run(cmd, capture_output=True, text=True).stdout
+    try:
+        d = json.loads(out)
+    except Exception:
+        d = {}
+    if d.get("path"):
+        print(f"  ✓ {f} 在远端 main 上（{d.get('size')} B，sha {str(d.get('sha'))[:12]}）")
+    else:
+        print(f"  ✗ 远端 main 上没有 {f} —— 本地有不算，得推上去")
+        bad = 1
+raise SystemExit(1 if bad else 0)
+PY
+[ $? -eq 0 ] || fail=1
+
+# 第二层：GitHub 的社区档案认不认（CONTRIBUTING 归我们管；SECURITY 还受开关限制）
 CP=$(api "/repos/$REPO/community/profile")
 printf '%s' "$CP" > "$TMP/comm.json"
-python3 - "$TMP/comm.json" <<'PY'
+PVR=$(api "/repos/$REPO/private-vulnerability-reporting")
+printf '%s' "$PVR" > "$TMP/pvr.json"
+python3 - "$TMP/comm.json" "$TMP/pvr.json" <<'PY'
 import json, sys
 d = json.load(open(sys.argv[1], encoding="utf-8"))
+pvr = json.load(open(sys.argv[2], encoding="utf-8"))
 if "health_percentage" not in d:
     print(f"  ✗ 取不到社区档案：{str(d)[:160]}")
     raise SystemExit(1)
 hp = d["health_percentage"]
 files = d.get("files") or {}
-rows = [("CONTRIBUTING", files.get("contributing")), ("SECURITY", files.get("security_policy")),
-        ("LICENSE", files.get("license")), ("README", files.get("readme"))]
 bad = 0
-for name, f in rows:
-    if f and f.get("html_url"):
-        print(f"  ✓ GitHub 认到 {name}：{f.get('path') or f.get('html_url')}")
-    else:
-        print(f"  ✗ GitHub 没认到 {name} —— 文件名要对（CONTRIBUTING.md / SECURITY.md），"
-              f"位置只认根级或 .github/（投影不带 .github/，所以必须放根级）")
-        bad = 1
+c = files.get("contributing")
+if c and c.get("html_url"):
+    print(f"  ✓ GitHub 认到 CONTRIBUTING：{c.get('path') or c.get('html_url')}")
+else:
+    print("  ✗ GitHub 没认到 CONTRIBUTING —— 文件名要对（CONTRIBUTING.md），位置只认根级或 .github/")
+    bad = 1
+sp = files.get("security_policy")
+pvr_on = bool(pvr.get("enabled"))
+if sp and sp.get("html_url"):
+    print(f"  ✓ GitHub 认到 SECURITY：{sp.get('path') or sp.get('html_url')}")
+elif pvr_on:
+    print("  ✗ 私密漏洞报告已开，但社区档案仍没认到 SECURITY —— 文件内容/位置有问题")
+    bad = 1
+else:
+    print("  · SECURITY.md 在远端，但社区档案里 security_policy 为空 —— 因为「私密漏洞报告」"
+          "开关是关的（private-vulnerability-reporting.enabled = false）")
+    print("    这个开关要 Administration:write，本机 PAT 没有（PUT 返回 403）⇒ 网页面板 "
+          "Settings → Code security → Private vulnerability reporting 点开即可")
 print(f"  · health_percentage：{hp}%")
 if hp < 50:
     print(f"  ✗ 社区档案只有 {hp}%（缺的项见上）—— 仓库页会一直提示「添加贡献指南」")
