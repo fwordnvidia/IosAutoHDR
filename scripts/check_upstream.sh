@@ -6,8 +6,15 @@
 # v0.4.0，而 main 已经前进 353 个提交。所以两条线都要报，并且以默认分支的打补丁结果为准。
 set -e
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-BASE=dcd05e5fa84c8c5c68b6ba66e3b1c6de016636ae      # 补丁的制作基线（v0.4.0）
+# 基线从 patch/BASELINE 读，不在这里再写一个 sha：这两个值曾经不一致
+# （脚本里写 dcd05e5 即 v0.4.0，而 patch/BASELINE 已经是 d5cbf7ff），
+# 结果是 `[ "$head" = "$BASE" ]` 那条判断永远不成立、`不前进` 的提示永远打不出来，
+# 而且读者会以为补丁还是对 v0.4.0 做的。唯一真相源只有一个。
+BASE=$(awk 'NR==1{print $1}' "$ROOT/patch/BASELINE")
 UP=https://github.com/jhaizhou-ops/S2Arm.git
+
+FULL=0
+for a in "$@"; do [ "$a" = "--full" ] && FULL=1; done
 
 dir=$(mktemp -d)
 trap 'rm -rf "$dir"' EXIT INT TERM
@@ -21,7 +28,7 @@ tags=$(git ls-remote --tags --refs "$UP")
 newest=$(printf '%s\n' "$tags" | sed 's#.*refs/tags/##' | grep '^v[0-9]' | sort -V | tail -1)
 tagsha=$(printf '%s\n' "$tags" | awk -v t="refs/tags/$newest" '$2==t {print $1}')
 
-echo "· 补丁制作基线：v0.4.0 ($BASE)"
+echo "· 补丁制作基线：$(echo "$BASE" | cut -c1-12)（$(awk 'NR==1{print $2}' "$ROOT/patch/BASELINE")）"
 echo "· 上游默认分支：$ref ($(echo "$head" | cut -c1-12))"
 echo "· 上游最新 tag：$newest ($(echo "$tagsha" | cut -c1-12))"
 
@@ -51,7 +58,22 @@ if git -C "$dir" apply --check "$ROOT/patch/hdr-auto-l1.patch" 2>/dev/null; then
     echo "✓ 补丁能干净地打到 $ref ($(echo "$head" | cut -c1-12))"
     if [ "$head" != "$BASE" ]; then
         echo "  注意：默认分支已比基线前进，打上不等于行为未变。"
+    fi
+    # --full：不只是「能打上」，而是「打上之后还能过闸门」。apply --check 只证明上下文对得上，
+    # 上游改了同一文件的别的函数时它照样通过，真正要验的是行为。2026-11-17 就是这么发现
+    # 上游 b66dc564 改了 nvn_mtl.m +75 行、而补丁仍全绿（149 项）的。
+    if [ "$FULL" = "1" ]; then
+        echo "· --full：就地打上并跑完整闸门（要几分钟）"
+        git -C "$dir" apply --whitespace=nowarn "$ROOT/patch/hdr-auto-l1.patch"
+        if "$ROOT/run_all.sh" "$dir" 2>&1 | tail -12; then
+            echo "✓ 补丁打在 $ref ($(echo "$head" | cut -c1-12)) 上，完整闸门全过"
+        else
+            echo "✗ 补丁能 apply，但在 $ref 上闸门有红项 —— 看上面最后几行"
+            exit 1
+        fi
+    else
         echo "  下一步：./run_all.sh <该树>（会就地跑二十四套，并核对 MSL/常数）"
+        echo "  或者本脚本加 --full，一步做完「打上 + 跑闸门」"
     fi
 else
     echo "✗ 补丁打不上 $ref —— 上游动过它碰的文件"

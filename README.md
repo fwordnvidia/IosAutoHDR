@@ -116,6 +116,12 @@ SpecialK / BT.2087 / BT.2408-8 / Apple EDR / Microsoft scRGB，每条都写「�
 注意上游 tag 仍停在 v0.4.0 而 `main` 已前进数百个提交，本补丁对**这一个提交**验证通过，上游再动需重跑 `./scripts/verify_upstream.sh <新 sha>`。
 0.4.0 上游**没有**任何 HDR 代码（`nvn_hdr*` 全缺、全树 `S2A_HDR` 零命中），所以这个补丁是纯新增。
 
+**它现在还能打到上游最新代码上吗**：2026-11-17 实测 `main` = `b66dc564`（比基线新）——
+`git apply --check` 干净通过，实打上后 `./run_all.sh` 149 项全过，上游 `graphics`/`runtime`
+零 HDR/EDR 意图标记。上游在此期间改了 81 个文件，**包括我们的主战场 `nvn_mtl.m`**（+75 −7，
+改在 PSO 首遇等待那一段），所以这个「能打上」不是「文件没动所以当然通过」。
+细节与复核方法见 `docs/PATCH-FRESHNESS.md`；上游再动就 `./scripts/check_upstream.sh --full`。
+
 ```bash
 git clone https://github.com/jhaizhou-ops/S2Arm.git s2arm && cd s2arm
 git checkout d5cbf7ff53f75b6132b17ce3a442d431bbbc8726
