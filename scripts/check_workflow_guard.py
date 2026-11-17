@@ -167,8 +167,14 @@ def main():
     al = shutil.which("actionlint")
     wf = os.path.join(ROOT, ".github", "workflows", "verify.yml")
     if al and os.path.exists(wf):
-        r = subprocess.run([al, "-shellcheck=", "-oneline", str(wf)],
-                           capture_output=True, text=True)
+        # shellcheck 装了就让 actionlint 用它审每个 run: 块的 shell（本轮靠它抓到 `! grep` 在
+        # set -e 下被豁免、clang 有 error 却打印「语法通过」的假绿）；没装就只做结构 lint。
+        sc = shutil.which("shellcheck")
+        args = [al, "-oneline", wf]
+        if not sc:
+            args.insert(1, "-shellcheck=")
+            print("· 未装 shellcheck —— run: 块的 shell 不审（装完 actionlint 会自动用上）")
+        r = subprocess.run(args, capture_output=True, text=True)
         if r.returncode != 0:
             for line in (r.stdout or r.stderr).strip().split("\n")[:6]:
                 msg = line.split(": ", 1)[-1]

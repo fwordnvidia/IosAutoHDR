@@ -49,13 +49,19 @@ Ubuntu 上无论跑多少次都跑不出来。跑一次约 10 分钟，公开仓
 这个 workflow 只能在 macOS 上跑，语法或路径写错一次就白烧一段 runner 时长。所以本地
 `check_workflow_guard.py` 把它能在 Linux 上核的部分全核了（共 12 条；第 12 条是「本机装了
 `actionlint` 就再交给它跑一遍」——表达式上下文名、runner 标签、`needs` 引用这些手写断言查不到的
-东西由它兜底，1.7.9 实测四类错全报；没装时明确打印跳过而不是静默）。本轮靠前 11 条抓到三处真错：
+东西由它兜底，1.7.9 实测四类错全报；没装时明确打印跳过而不是静默。再装了 `shellcheck`
+（0.10.0）时 actionlint 会连每个 `run:` 块的 shell 一起审——本轮靠这一层抓到第四处真错：
+`! grep -E ": (fatal )?error:"` 在 `set -e` 下被 bash 豁免（SC2251），clang 真有 error 时
+grep 命中、`!` 返回 1，脚本却继续打印「· 语法通过」⇒ 一次手动运行烧掉 10 分钟给出绿色假象；
+已改成显式 `if grep …; then exit 1; fi`，最小实验证明旧写法 rc=0、新写法 rc=1）。
+本轮靠前 11 条抓到三处真错：
 
 | 抓到的错 | 为什么本地就能发现 |
 | --- | --- |
 | `clang … host_adapt.m` 假设它和 `nvn_mtl.m` 同目录 | 实际在 `graphics/nvn/host_adapt.m`；对照上游树就知道 |
 | `-I/tmp/s2a/build/nvn/gen` | 上游仓库里**没有** `build/` 目录；而且它不在 sparse 集里，clone 出来永远不存在 |
 | 每个 `run:` 块没做语法校验 | 现在逐个跑 `bash -n`；`for`/`if` 写错一次就是一次白跑 |
+| `! grep -E ": error:"` 判 clang 失败 | `!` 前缀命令的失败在 `set -e` 下被 bash 豁免（SC2251），有 error 也打印「语法通过」⇒ 改成 `if grep …; then exit 1; fi` |
 
 ## 三、维护者此后遵守的九条
 
