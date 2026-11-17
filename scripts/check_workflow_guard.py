@@ -91,12 +91,16 @@ def main():
         if not runs_on.startswith("macos-"):
             problems.append("job %s 的 runs-on=%r 不是 macos-*" % (name, runs_on))
 
-    # 4) 不许 build 整包
+    # 4) 不许引入额外凭据面：这个 workflow 只用 checkout 的默认 token
+    if re.search(r"\$\{\{\s*secrets\.", raw):
+        problems.append("出现 secrets.*：这个 workflow 不需要任何密钥，引入它只是多一个泄露面")
+
+    # 5) 不许 build 整包
     for word in ("xcodebuild", "^\\s*make\\b"):
         if re.search(word, raw, re.M):
             problems.append("出现 %r —— 这个 workflow 只编 shader 与语法检查，不 build 整包" % word)
 
-    # 5) 写死的基线必须与 patch/BASELINE 一致
+    # 6) 写死的基线必须与 patch/BASELINE 一致
     if not os.path.isfile(BASELINE):
         problems.append("找不到 patch/BASELINE")
     else:
