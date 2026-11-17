@@ -18,16 +18,24 @@ say "1) CI 配置只有一个只手动触发的 workflow（没有任何自动触
 # 但**默认不进投影** —— 推它需要 PAT 有 `workflow` scope，不为一个 CI 文件去扩权。
 # 所以这里两种形态都合法：没有 .github（默认）；有则必须只有那一个手动 workflow。
 if [ -e .github ]; then
-    extra=$(find .github -type f ! -path '.github/workflows/verify.yml' | head -5)
-    if [ -z "$extra" ]; then ok ".github/ 只有 workflows/verify.yml（只手动触发，见第 9 组）"
+    # 允许的只有「手动 workflow」+「社区文件」（issue 表单 / PR 模板）。社区文件推上去
+    # 不需要 workflow scope，因此它们与 CI 走的不是同一条开关，不能一起否定。
+    extra=$(find .github -type f \
+        ! -path '.github/workflows/verify.yml' \
+        ! -path '.github/pull_request_template.md' \
+        ! -path '.github/ISSUE_TEMPLATE/*' | head -5)
+    if [ -z "$extra" ]; then ok ".github/ 只有手动 workflow 与社区文件（issue 表单 / PR 模板）"
     else bad ".github/ 里有多余文件：$(echo $extra | tr '\n' ' ')"; fi
 else
     ok "投影未带 .github/（默认形态：不为推 CI 文件去扩 token 权限）"
 fi
-n=$(find . -path ./.git -prune -o -name '*.yml' -print -o -name '*.yaml' -print 2>/dev/null | wc -l)
-if [ "$n" -eq 0 ]; then ok "无 .yml/.yaml（未带 workflow）"
-elif [ "$n" -eq 1 ]; then ok "只有 1 个 .yml（那个手动 workflow）"
-else bad "有 $n 个 yml/yaml，预期 0 或 1"; fi
+# 只数 CI 用的 yml：issue 表单（.github/ISSUE_TEMPLATE/*.yml）是给 GitHub 渲染表单的，
+# 不是 workflow，混在一起数会让「带了 issue 表单」看起来像「多了一个 CI」。
+n=$(find . -path ./.git -prune -o -path ./.github/ISSUE_TEMPLATE -prune -o \
+        \( -name '*.yml' -o -name '*.yaml' \) -print 2>/dev/null | wc -l)
+if [ "$n" -eq 0 ]; then ok "无 workflow yml（投影默认不带 CI）"
+elif [ "$n" -eq 1 ]; then ok "只有 1 个 yml（那个手动 workflow）"
+else bad "有 $n 个非社区 yml/yaml，预期 0 或 1"; fi
 
 say "2) 不含上游整文件（只交付补丁与自写代码）"
 before=$fail

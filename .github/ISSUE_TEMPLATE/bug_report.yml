@@ -1,0 +1,94 @@
+name: 问题（黑屏 / 花屏 / 掉帧 / 数值不对）
+description: 报错、贴日志、说清用的是哪个基线。没有这些信息基本无法复现。
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        这个仓库交付的是**一个补丁**，所以第一件事永远是「打在哪棵树上」。
+        下面几栏请照着填；填不了的就写「不知道」，比留空好——留空会让问题卡在原地。
+
+  - type: input
+    id: baseline
+    attributes:
+      label: 补丁基线
+      description: 打补丁时用的上游提交。取 `patch/BASELINE` 第一列（或 `git -C <树> rev-parse HEAD`）。
+      placeholder: d5cbf7ff53f75b6132b17ce3a442d431bbbc8726
+    validations:
+      required: true
+
+  - type: input
+    id: tree
+    attributes:
+      label: 上游树
+      description: 哪来的、sparse 了哪些目录（本补丁只需要 graphics/runtime/tools/compat/ios）。
+      placeholder: clone jhaizhou-ops/S2Arm，sparse-checkout graphics runtime tools compat ios
+    validations:
+      required: true
+
+  - type: dropdown
+    id: stage
+    attributes:
+      label: 卡在哪一步
+      options:
+        - 打补丁（git apply / patch）
+        - 本地闸门（run_all.sh）
+        - 构建（xcodebuild / theos）
+        - 启动即黑屏
+        - 能跑但画面不对（色偏/鬼影/闪烁）
+        - 数值不对（HDR stat 行与预期差很多）
+        - 其他
+    validations:
+      required: true
+
+  - type: textarea
+    id: env
+    attributes:
+      label: 环境
+      description: 设备型号 / iOS 版本 / 是否越狱 / app 是开发签名还是商店包 / Xcode 或 clang 版本。
+      placeholder: iPhone SE 3 (iPhone14,6) / iOS 27.3 (24C5049d) / 未越狱 / 自签 / Xcode 16.2
+    validations:
+      required: true
+
+  - type: textarea
+    id: switches
+    attributes:
+      label: 打开了哪些开关
+      description: 所有 `S2A_*` 环境变量，一行一个。三格矩阵请写明当前是哪一格。
+      placeholder: |
+        S2A_HDR_OUTPUT=1
+        S2A_HDR_FMT=1
+        S2A_HDR_LOG=1
+        （这是 T2）
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望 / 实际
+      description: 分开写。画面问题请描述「哪块区域、什么颜色、静止时有没有」。
+    validations:
+      required: true
+
+  - type: textarea
+    id: log
+    attributes:
+      label: 日志
+      description: |
+        `S2A_HDR_LOG=1` 之后，日志落在**app 容器** `Documents/host.log`（不是系统日志，
+        `idevicesyslog` 抓不到）。`./scripts/fetch_device_log.sh <bundle-id> [输出]` 会尝试
+        ifuse 或 go-ios 隧道把它拉下来。至少贴 `HDR stat:` 那几行。
+      render: text
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: tried
+    attributes:
+      label: 已经排除的
+      options:
+        - label: 干净树上 `./run_all.sh <树>` 是绿的
+        - label: 换回不打补丁的版本，问题消失（说明与补丁有关）
+        - label: 关掉 HDR（不设 `S2A_HDR_OUTPUT`）就正常
