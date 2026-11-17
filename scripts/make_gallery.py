@@ -10,12 +10,14 @@
     能量由 EDR 屏幕还原，普通显示器只能压。
   - 因此这些图可用于「哪些区域被抬、是否偏色、有没有硬裁」，不能用于判断最终观感。
 """
+import glob
 import hashlib
 import os
+import shutil
 import subprocess
 import sys
 
-from PIL import Image, ImageChops
+from PIL import Image, ImageChops, ImageStat
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 IMG = os.path.join(ROOT, "docs", "img")
@@ -36,6 +38,106 @@ def run(cmd):
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL)
 
 
+def _pixel_diff_frac(a, b):
+    """同尺寸 RGB 两图：至少一个通道不同的像素占比（%）。
+
+    注意不能数「不同的字节」再除以像素数 —— 那样三个通道全变会算出 300%，
+    本次就真的打印过 224.5% 这种不可能的数（守卫自己得先对）。
+    """
+    da, db = a.tobytes(), b.tobytes()
+    total = len(da) // 3
+    hit = 0
+    for i in range(0, len(da), 3):
+        if da[i:i + 3] != db[i:i + 3]:
+            hit += 1
+    return 100.0 * hit / total
+
+
+PANEL = (480, 270)                      # 实拍素材是 480x270
+PAIR = (PANEL[0] * 2 + 4, PANEL[1])      # 并排：中间 4 像素黑缝
+CROP_W, CROP_H = 60, 34                  # 裁切窗口
+CROP = (CROP_W * 2 * 4 + 4, CROP_H * 4)  # 4x 放大后左右并排
+
+
+def verify_images(gallery_text):
+    """核对图**内容**：尺寸、是否真是照片、左右两半是不是各自的输入、文字里的数字。
+
+    为什么光有指纹不够：指纹只证明「文件没被动过」，不证明「文件里的东西是对的」。
+    换掉一张空白图再更新指纹，指纹一样绿；把 pair 的左右两半贴反，指纹也绿。
+    这里全部从已提交的 PNG 现算，不需要 build/、不需要 cc。
+    """
+    bad = 0
+    for name, _why in PHOTOS:
+        paths = {role: os.path.join(IMG, "%s-%s.png" % (name, role))
+                 for role in ("sdr", "hdr", "content", "pair", "crop", "map-pair")}
+        imgs = {}
+        for role, p in paths.items():
+            im = Image.open(p).convert("RGB")
+            want = CROP if role == "crop" else (PAIR if role in ("pair", "map-pair") else PANEL)
+            if im.size != want:
+                print("✗ %s-%s.png 尺寸 %dx%d，预期 %dx%d"
+                      % (name, role, im.size[0], im.size[1], want[0], want[1]))
+                bad = 1
+            imgs[role] = im
+        if bad:
+            continue
+        sdr, hdr, con = imgs["sdr"], imgs["hdr"], imgs["content"]
+        w, h = PANEL
+
+        # ① 不是空白图 / 不是纯色图：亮度标准差够大
+        for role, im in (("sdr", sdr), ("hdr", hdr)):
+            sd = ImageStat.Stat(im.convert("L")).stddev[0]
+            if sd < 20.0:
+                print("✗ %s-%s.png 亮度标准差只有 %.1f —— 这不像照片（空白/纯色图？）"
+                      % (name, role, sd))
+                bad = 1
+
+        # ② SDR 与 HDR 必须真有差别：贴成同一张图的话，整个对照图失去意义
+        changed = _pixel_diff_frac(sdr, hdr)
+        if changed < 50.0:
+            print("✗ %s：SDR 与 HDR 只有 %.1f%% 的通道字节不同 —— 两张图贴错了？" % (name, changed))
+            bad = 1
+
+        # ③ 并排图的左右两半必须就是各自的输入（贴反/贴重都会被这条抓住）
+        for role, left, right in (("pair", sdr, hdr), ("map-pair", hdr, con)):
+            im = imgs[role]
+            if im.crop((0, 0, w, h)).tobytes() != left.tobytes():
+                print("✗ %s-%s.png 左半不是 %s" % (name, role, "sdr" if role == "pair" else "hdr"))
+                bad = 1
+            if im.crop((w + 4, 0, w + 4 + w, h)).tobytes() != right.tobytes():
+                print("✗ %s-%s.png 右半不对" % (name, role))
+                bad = 1
+
+        # ④ 4x 裁切的左右两半必须不同（同一块猜两次就等于没给看点）
+        crop = imgs["crop"]
+        hw = CROP_W * 4
+        if crop.crop((0, 0, hw, CROP_H * 4)).tobytes() ==                 crop.crop((hw + 4, 0, hw + 4 + hw, CROP_H * 4)).tobytes():
+            print("✗ %s-crop.png 左右两半一模一样 —— 裁的是没变化的地方" % name)
+            bad = 1
+
+        # ⑤ GALLERY.md 里那句「平均 X 级、Y% 的像素差 > 4 级」必须能从这两张图算回来
+        dd = ImageChops.difference(hdr, con)
+        lum = dd.convert("L").tobytes()
+        avg = sum(lum) / len(lum)
+        pct = 100.0 * sum(1 for v in lum if v > 4) / len(lum)
+        for needle in ("平均 **%.1f 级**" % avg, "**%.0f%%** 的像素差" % pct):
+            if needle not in gallery_text:
+                print("✗ %s：GALLERY.md 里找不到 %s（按两张现成图算出来的值）" % (name, needle))
+                bad = 1
+        # 「98%%–100%% 的码值变化」这句也得站得住
+        anydiff = _pixel_diff_frac(hdr, con)
+        if anydiff < 98.0:
+            print("✗ %s：内容档只改了 %.2f%% 的像素，而 GALLERY.md 写的是 98%%–100%%"
+                  % (name, anydiff))
+            bad = 1
+        print("  ✓ %s：%dx%d，SDR/HDR 差 %.1f%% 像素，两档差 平均 %.1f 级 / %.0f%% >4 级 / %.1f%% 像素"
+              % (name, w, h, changed, avg, pct, anydiff))
+    if bad:
+        return 1
+    print("✓ 6 类图 × 3 张：尺寸、非空白、左右两半、两档差值都能从现成 PNG 复算")
+    return 0
+
+
 def main():
     check = "--check" in sys.argv
     os.makedirs(IMG, exist_ok=True)
@@ -53,8 +155,18 @@ def main():
         con_png = os.path.join(IMG, "%s-content.png" % name)
         map_pair_png = os.path.join(IMG, "%s-map-pair.png" % name)
         if not check:
+            # 干净克隆里既没有 build/ 也没有工具，必须能自己把前置条件凑出来：
+            # 之前这里写的是 run(["make", "-s"])，而仓库根本没有 Makefile ⇒
+            # GALLERY.md 让读者「重跑不带 --check」，那条路一执行就崩在 make 上。
+            os.makedirs(os.path.join(ROOT, "build"), exist_ok=True)
+            os.makedirs(REAL, exist_ok=True)
+            for f in sorted(glob.glob(os.path.join(ROOT, "testdata", "p_*.ppm"))):
+                dst = os.path.join(REAL, os.path.basename(f))
+                if not os.path.exists(dst):
+                    shutil.copyfile(f, dst)
             if not os.path.exists(CONV):
-                run(["make", "-s"])   # 构建工具（run_all 会先建好）
+                run(["cc", "-O2", "-w", "-I", os.path.join(ROOT, "src"),
+                     os.path.join(ROOT, "tools", "hdr_convert.c"), "-lm", "-o", CONV])
             run([CONV, src, sdr_ppm, "--head", HEAD, "--sat", "1"])
             run([CONV, src, hdr_ppm, "--head", HEAD, "--sat", SAT])
             # 内容档（BT.2408 纸白）：缺省档只在白点以上扩张，内容档把 98% 以上像素一起抬。
@@ -100,7 +212,8 @@ def main():
             # 不写「看得出差别」这种话：800px 宽的并排图在普通屏幕上一眼看不出来，
             # 给数字才能让人知道该看哪、也能在别人机器上复现。
             dd = ImageChops.difference(b, c)
-            px = list(dd.convert("L").getdata())
+            # 用 tobytes()：L 模式一像素一字节，且 Pillow 14 会删掉 Image.getdata()。
+            px = dd.convert("L").tobytes()
             mapdiff[name] = (sum(px) / len(px), 100.0 * sum(1 for v in px if v > 4) / len(px))
         for p in (sdr_png, hdr_png, pair_png, crop_png, con_png, map_pair_png):
             if not os.path.exists(p):
@@ -110,7 +223,10 @@ def main():
 
     lines = [
         "# 对照图（真实照片）", "",
-        "由 `scripts/make_gallery.py` 生成，`--check` 校验清单与图片指纹。",
+        "由 `scripts/make_gallery.py` 生成。`--check` 不只看指纹，还核对图**内容**："
+        "尺寸（480×270 / 并排 964×270 / 裁切 484×136）、亮度标准差（挡空白图）、"
+        "并排图左右两半是否就是各自的输入（挡贴反/贴重）、裁切左右是否真有差别，"
+        "以及下面每段写的「平均 X 级 / Y%」能不能从这两张现成 PNG 算回来。",
         "",
         "**这些是预览映射，不是上屏结果**：脚本用 Reinhard 把 HDR 输出压到 8 位再按 sRGB 编码，"
         "真机上 head 以上的能量由 EDR 屏幕还原。所以这些图能说明「哪些区域被抬起来、有没有偏色、"
@@ -149,7 +265,7 @@ def main():
                 print("✗ %s 的指纹与 GALLERY.md 不一致（重跑不带 --check）" % path)
                 return 1
         print("✓ docs/GALLERY.md 与 %d 张图一致" % len(manifest))
-        return 0
+        return verify_images(old)
     with open(OUT, "w", encoding="utf-8") as f:
         f.write(text)
     print("✓ 写入 docs/GALLERY.md（%d 张图）" % len(manifest))

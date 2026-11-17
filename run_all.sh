@@ -91,7 +91,7 @@ step "0k/5 BT.2408 display-referred 放置方式（与 knee 并列的第二条�
 cc -O2 -w -I src src/t_hdr_bt2408.c -lm -o build/t_hdr_bt2408 || fail=1
 ./build/t_hdr_bt2408 || fail=1
 
-step "0j/5 对照图（真实照片：SDR vs 自动 HDR）"
+step "0j/5 对照图（真实照片：SDR vs 自动 HDR；--check 连图内容一起核）"
 python3 scripts/make_gallery.py --check || fail=1
 
 step "0r/5 与方法 A 的定量对照（逆函数自检 + 逐码值表）"
