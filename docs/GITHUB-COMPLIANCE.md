@@ -144,7 +144,7 @@ grep 命中、`!` 返回 1，脚本却继续打印「· 语法通过」⇒ 一�
 代价：`zip(strict=)` 需要 Python ≥ 3.10，README 已把它写成**显式依赖**（原来只写「依赖 `python3`」，
 现在写「`python3` 要 ≥ 3.10，因为用了 `zip(strict=)`」）。改完 5 个受影响脚本复跑全绿
 （`report_ablate` 57 行、`report_cost` 最慢 0.6383 µs、`report_video` 25 行、`check_convert` 15 项、
-`check_device_log --selftest` 13 项）。
+`check_device_log --selftest` 当轮为 13 条用例，现已扩充）。
 
 负向验证：往 `check_baseline.py` 末尾加 `import json` ⇒
 `scripts/check_baseline.py:92:8: F401 [*] `json` imported but unused`，脚本红；删掉即绿。

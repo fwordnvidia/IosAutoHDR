@@ -11,7 +11,7 @@ README 里并不存在 ⇒ `str.replace` 什么也没替换，脚本却照常打
   2. 用户会直接跑的入口脚本必须在 README 出现（加了脚本却没人知道怎么用，等于没加）
   3. README 引用的 docs/*.md 与 patch/* 真实存在
 """
-import re, sys
+import os, re, subprocess, sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -95,6 +95,42 @@ for _i, _line in enumerate(readme.split('\n'), 1):
         # 因为那正是原来那行的样子 —— 列名写着 MSL 语法、内容说的是一次编译。
         if '.metal' not in _line.split('xcrun', 1)[1]:
             fails.append(f'README.md:{_i} 用 ✅ 声称 xcrun 真编译，但没点明编的是哪个 .metal 文件')
+
+# 8) 文档里凡写「N 项自测 / N 项合成日志自测 / --selftest N 项」，必须等于判读脚本现算的用例数。
+#    踩过的实例：`--selftest` 从 8 项长到 15 项（加过 16F 正例、缺跟随行、显式 headroom 三个用例），
+#    而 docs/PR.md 与 report_review.py 里各写着一处「8 项」，生成物 REVIEW.md 也跟着错 ——
+#    两处手写的数字，没人改。数字要么现算，要么不写。
+#    「现算」= 真去跑一次 --selftest 并读它自报的项数：数夹具条目会数错（脚本里还内联了
+#    「logcat 前缀」那条不进 SELFTEST_CASES 的用例），也不该让文档守卫复制一份计数逻辑。
+_out = subprocess.run([sys.executable, str(ROOT / 'scripts' / 'check_device_log.py'), '--selftest'],
+                      capture_output=True, text=True)
+_m = re.search(r'自测 (\d+) 项', _out.stdout)
+if not _m:
+    fails.append('scripts/check_device_log.py --selftest 没跑出「自测 N 项」（判读脚本坏了？）')
+    _self_cases = -1
+else:
+    _self_cases = int(_m.group(1))
+for _md in [ROOT / 'README.md'] + sorted((ROOT / 'docs').glob('*.md')):
+    for _i, _line in enumerate(_md.read_text(encoding='utf-8').split('\n'), 1):
+        for _m in re.finditer(r'(\d+)\s*项(?:合成日志)?自测|--selftest[^0-9\n]{0,16}(\d+)\s*项', _line):
+            _n = int(_m.group(1) or _m.group(2))
+            if _n != _self_cases:
+                fails.append(f'{_md.name}:{_i} 写 {_n} 项自测，而 check_device_log.py 现有 '
+                             f'{_self_cases} 个用例 —— 数字要么现算，要么别写死')
+
+# 9) 文档让人敲的 `./scripts/x.py` / `./tools/x.py`，必须真的有可执行位。
+#    踩过的实例：`check_hdr_hooks.py` 建的时候漏了 `chmod +x` —— README 里写着
+#    `./scripts/check_hdr_hooks.py`，用户照着敲得到 `权限不够`，而 run_all 里写的是
+#    `python3 scripts/…`，所以闸门一路绿。文档里的命令必须能原样跑。
+_exec_refs = {}
+for _md in [ROOT / 'README.md'] + sorted((ROOT / 'docs').glob('*.md')):
+    for _m in re.finditer(r'\./(scripts|tools)/([A-Za-z0-9_.\-]+)', _md.read_text(encoding='utf-8')):
+        _f = ROOT / _m.group(1) / _m.group(2)
+        if _f.exists() and not _f.stem == '':
+            _exec_refs.setdefault(str(_f.relative_to(ROOT)), _md.name)
+for _rel, _mdname in sorted(_exec_refs.items()):
+    if not os.access(ROOT / _rel, os.X_OK):
+        fails.append(f'{_mdname} 让你敲 ./{_rel}，但它没有可执行位（chmod +x {_rel}）')
 
 if fails:
     for f in fails:

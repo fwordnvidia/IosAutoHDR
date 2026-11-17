@@ -102,7 +102,7 @@ EXTRA = [
     ("tools/hdr_fidelity.c", "逐像素：纸白以下有没有动、多少像素真吃到增益、增益分布。", "scripts/report_fidelity.py"),
     ("scripts/check_landing.py", "在打好的树上断言 36 处注入点仍在（按函数范围而不是行号）。", "run_all.sh 4/5"),
     ("scripts/check_msl.py", "没有 Metal 编译器时挡 MSL 已知雷区（72 项 / 4 个 MSL 文件）。", "run_all.sh 0f/5"),
-    ("scripts/check_device_log.py", "把设备日志判读成 T1/T2/T3 结论（8 项自测）。", "run_all.sh 0x/5"),
+    ("scripts/check_device_log.py", "把设备日志判读成 T1/T2/T3 结论（合成日志自测，项数以 `--selftest` 自报为准）。", "run_all.sh 0x/5"),
 ]
 
 

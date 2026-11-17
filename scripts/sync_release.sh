@@ -30,6 +30,15 @@ for f in "$ROOT"/scripts/*; do
         *) cp "$f" "$DST/scripts/" ;;
     esac
 done
+# 可执行位要单独搬：`cp` 写到**已存在**的目标文件时保留目标自己的权限位，
+#   于是开发树里 `chmod +x` 过的脚本，投影里仍是 644 —— 照 README 敲 `./scripts/x.py`
+#   得到「权限不够」。2026-11-18 投影自检第 11 组（clone 后跑 run_all）才发现。
+for f in "$ROOT"/scripts/* "$ROOT"/tools/* "$ROOT"/testdata/*; do
+    [ -x "$f" ] || continue
+    _dst="$DST/${f#$ROOT/}"
+    [ -e "$_dst" ] && chmod +x "$_dst"
+done
+for f in run_all.sh verify.sh; do [ -x "$ROOT/$f" ] && chmod +x "$DST/$f"; done
 cp "$ROOT/README.md" "$DST/README.md"
 # 根级入口脚本：投影的「接收步骤」写的就是 `./run_all.sh <树>` / `./verify.sh <树>`，
 # 但白名单此前只拷了 README 与 src/docs/patch/tools/scripts —— 于是公开仓库里根本没有这两个文件，
