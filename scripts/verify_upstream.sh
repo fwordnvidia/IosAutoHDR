@@ -18,7 +18,7 @@ BASE=$(grep -v '^#' patch/BASELINE | awk '{print $1}' | head -1)
 MODE=baseline
 case "${1:-}" in
   "")        sha=$BASE ;;
-  --head)    MODE=head; sha=$(git ls-remote "$UP" HEAD | cut -f1) ;;
+  --head)    MODE=tip; sha=$(git ls-remote "$UP" HEAD | cut -f1) ;;
   -h|--help) sed -n '2,12p' "$0"; exit 0 ;;
   *)         MODE=explicit; sha=$1 ;;
 esac
@@ -45,7 +45,7 @@ fi
 
 echo
 echo "✗ 这个提交上打不上或验不过。"
-if [ "$MODE" = head ]; then
+if [ "$MODE" = tip ]; then
     echo "  上游 head 已离开基线，属于正常。要看差多少："
     echo "    ./scripts/baseline_report.sh"
     echo "  要跟上去：按 docs/PR.md「基线迁移」把改动重放到上游新版文件上，再改 patch/BASELINE。"

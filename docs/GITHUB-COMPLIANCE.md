@@ -86,3 +86,21 @@ grep 命中、`!` 返回 1，脚本却继续打印「· 语法通过」⇒ 一�
  - 设备端行为没有任何承诺：MSL 在本机只做静态核对（72 项 / 4 个 MSL 文件），真编译要靠上面那个手动
   workflow 跑一次（约 10 分钟，需 token 有 `workflow` scope 才能推上去）；ObjC 在 macOS 上做
   `-fsyntax-only`，**没有链接、也没有在真机跑过**。
+
+## 仓库自己的 shell 也过一遍（0w16/5）
+
+给 workflow 的 `run:` 块接了 shellcheck 之后才想明白一件事：仓库里 13 个 `.sh` 从没被审过。
+一开就 4 条 warning，其中两条是真错：
+
+| 告警 | 真问题 |
+| --- | --- |
+| `run_all.sh:9 SC2164` `cd "$(dirname "$0")"` | 不检查失败：进不去时后面每条命令都在调用者 cwd 跑，`mkdir -p build` 会建在错的地方 |
+| `fetch_device_log.sh:60 SC2024` | 误报（`/tmp` 本用户可写，重定向 fd 由 root 继承），已用 `# shellcheck disable` + 理由标注 |
+| `rebase_patch.sh:32` / `verify_upstream.sh:21` `SC2209` | `MODE=head` 里的 `head` 是命令名，shellcheck 以为你想 `$(head …)`；改名 `MODE=tip` |
+
+还顺带抓到一个**更严重的**：`0w16/5` 第一版照抄了 `check_repo_hygiene.sh` 的 `ok "…"` / `bad "…"`，
+可 `run_all.sh` 只定义了 `step()`。运行时是 `./run_all.sh: 159: ok: not found`，而 `fail` 从未被置 1
+—— 整体照样「✓ 全部通过」。shellcheck 也看不见（它不跨文件推断函数存在，`ok`/`bad` 又是合法命令名）。
+
+所以补了 `scripts/check_shell_helpers.py`：扫所有 `.sh`，把 `ok/bad/step/die/warn/note/info` 的调用
+与文件内定义比对，缺定义即判红（系统里没有叫这些名字的命令，「未定义即 bug」成立）。

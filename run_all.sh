@@ -1,12 +1,12 @@
 #!/bin/sh
-# 一条命令跑完全部本地闸门。CI（hdr-check.yml）跑的是其中 1~5 步的子集，
+# 一条命令跑完全部本地闸门。CI（.github/workflows/verify.yml，只能手动派发）跑其中 1~5 步的子集，
 # 因为 CI 只认 C 侧可验证的部分（MSL/ObjC 需 Apple 工具链，见 docs/VERIFICATION.md）。
 #
 # 用法：./run_all.sh [干净树根]
 #   不给树根：只跑不需要 S2Arm 树的部分（hdr_ref 自检 / 敏感度扫描 / 曲线图）。
 #   给树根：额外把补丁打进那棵树并跑全部单测（树必须是干净的 v0.4.0 sparse graphics）。
 set -u
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || { echo "✗ 进不去脚本所在目录：$(dirname "$0")" >&2; exit 1; }
 fail=0
 mkdir -p build          # 解包后（包里不带 build/）第一个 cc -o build/xxx 否则会失败
 # 真实照片素材随包发布在 testdata/（三张 480x270 PPM，来源见 docs/SOURCES.md），而单测与工具
@@ -21,6 +21,10 @@ done
 nphoto=$(ls build/real/p_*.ppm 2>/dev/null | wc -l | tr -d ' ')
 [ "$nphoto" -ge 3 ] || echo "  · 只有 $nphoto 张真实照片（testdata/ 与 build/real/ 都查了）"
 step() { printf '\n=== %s ===\n' "$1"; }
+# 与 scripts/*.sh 保持同一套辅助函数名。缺了它们，调用方只会在 stderr 打一行
+# "ok: not found"，而 fail 不会被置 1 ⇒ 整体仍是「✓ 全部通过」。0w16/5 第一版就这么假绿过。
+ok()  { echo "  ✓ $*"; }
+bad() { echo "  ✗ $*"; fail=1; }
 
 step "0/5 量化报告（docs/QUALITY.md 必须与实测一致）"
 if ./build/hdr_ref --synth uiwhite --stats >/dev/null 2>&1; then
@@ -149,6 +153,23 @@ python3 scripts/check_patch_stats.py --check || fail=1
 step "0w15/5 CI workflow 只手动跑（无 push/PR 触发、有 concurrency、timeout ≤20 分钟、基线不漂移）"
 python3 scripts/check_workflow_guard.py || fail=1
 
+step "0w16/5 仓库自己的 shell（shellcheck -S warning + 调用的辅助函数必须有定义）"
+# 讽刺过一轮：给 workflow 的 run: 块接了 shellcheck，却没审过仓库自己的 .sh。
+# 一开就抓到 4 条 warning（cd 不检查失败、`MODE=head` 被当成命令、sudo 重定向），其中
+# `cd "$(dirname "$0")"` 不检查是最实在的一条：进不去时后面每条命令都在调用者 cwd 跑。
+# 可选依赖：没装就明确跳过，不静默。
+# 先查辅助函数：`ok: not found` 这类错只写 stderr、不置 fail，shellcheck 也看不见。
+python3 scripts/check_shell_helpers.py || fail=1
+if command -v shellcheck >/dev/null 2>&1; then
+    if shellcheck -S warning -f gcc ./*.sh scripts/*.sh; then
+        ok "13 个 shell 脚本 shellcheck 无 warning"
+    else
+        bad "shellcheck 报了 warning（见上）—— 修完再提交"
+    fi
+else
+    echo "  · 未装 shellcheck —— 跳过（brew/apt install shellcheck，或下 release 的静态二进制）"
+fi
+
 step "0w3/5 文档计数（套数 / 断言总数 / 上屏 fragment 字节数 必须与实测一致）"
 python3 scripts/check_counts.py || fail=1
 
@@ -223,7 +244,7 @@ if [ $# -ge 1 ]; then
     step "4b/5 格式假设（对着刚打完补丁的树核 13 条 + docs/UPSTREAM-ASSUMPTIONS.md）"
     python3 scripts/check_format_assumptions.py "$1" --check || fail=1
 else
-    echo "  跳过（没给树根）；CI 里由 hdr-check.yml 完成这一步"
+    echo "  跳过（没给树根）；CI 里由 verify.yml 完成这一步"
     echo "  （0w13/5 格式假设也要树根，一并跳过：它要对着打补丁后的源码核）"
 fi
 

@@ -191,7 +191,10 @@ T3 必须失败），避免判据只会点头。
 4. **运行期**：没有一次在本机或真机上跑过带 HDR 的壳。黑屏假设（T1/T2/T3 三格矩阵）未验。
 5. **画质**：所有画质结论都是**合成内容**上的数值结论，没有真实游戏截图/录像的对照。
 
-恢复 GitHub 账号后，`.github/workflows/hdr-check.yml` 会自动把这些补回来（第 7/8 步编 MSL，第 6 步编 ObjC）。
+`.github/workflows/verify.yml` 能补上前两条：它 `xcrun metal` 真编 4 个 MSL 文件、核常数、
+对两个改过的 ObjC 文件跑 `clang -fsyntax-only`。**注意它只能手动派发**，而且默认不进公开投影
+（推动它需要给 token 加 `Workflows` 权限，见 `docs/GITHUB-COMPLIANCE.md` 的取舍）。
+运行期与画质两条仍然只有真机能给。
 
 ## 切镜
 

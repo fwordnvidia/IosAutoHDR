@@ -29,7 +29,7 @@ case "$arg" in
       TREE=${2:?用法: rebase_patch.sh --check <已 checkout 的树>}
       MODE=check ;;
   --head)
-      MODE=head; sha=$(git ls-remote "$UP" | awk '$2=="HEAD"{print $1}') ;;
+      MODE=tip; sha=$(git ls-remote "$UP" | awk '$2=="HEAD"{print $1}') ;;
   *)
       MODE=sha; sha=$arg ;;
 esac

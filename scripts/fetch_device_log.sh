@@ -56,6 +56,7 @@ if [ -x "$IOSKIT/ios" ]; then
     echo "· 试路径 B（userspace 隧道 + ios file pull，需要 sudo）"
     if sudo -n true 2>/dev/null; then
         pkill -f '[t]unnel start' 2>/dev/null
+        # shellcheck disable=SC2024  # /tmp 本用户可写，重定向打开的 fd 由 root 继承，日志写得进去
         sudo -n env ENABLE_GO_IOS_AGENT=user nohup "$IOSKIT/ios" tunnel start --userspace \
             --tunnel-info-port=28100 >/tmp/s2a-tun.log 2>&1 &
         sleep 10
