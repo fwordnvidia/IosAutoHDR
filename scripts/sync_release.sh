@@ -35,6 +35,16 @@ cp "$ROOT/README.md" "$DST/README.md"
 # 但白名单此前只拷了 README 与 src/docs/patch/tools/scripts —— 于是公开仓库里根本没有这两个文件，
 # 照文档做的人第一步就 command not found。2026-11-17 消费端测试发现（tar 包里有，投影里没有）。
 cp "$ROOT/run_all.sh" "$ROOT/verify.sh" "$DST/" || exit 1
+# 根级社区档案：GitHub 只认根级或 .github/ 下的这几个文件名，而投影按设计不带 .github/
+# （见上面 CI 那条），所以只能放根级。缺了它们仓库页会一直提示「添加贡献指南」，
+# 社区档案 health 停在 42%。
+cp "$ROOT/CONTRIBUTING.md" "$ROOT/SECURITY.md" "$DST/" || exit 1
+# LICENSE 与 NOTICE 一直没进白名单 —— 它们是投影建仓那一次手工拷进去的，之后再没被刷新。
+# 后果有两条：① 我们改了 NOTICE（补丁基线迁移时必然要改），投影里那个还是旧的；
+# ② 投影里的 NOTICE 其实是**上游**那份，列的是上游打进去的三方件（GPL bash、Ryujinx…），
+#    还指向 THIRD_PARTY_LICENSES.md 与 docs/第三方依赖.md —— 这两个文件投影里根本没有。
+# 不分发上游代码却挂上游的三方清单，等于对外声称一件不存在的事。
+cp "$ROOT/LICENSE" "$ROOT/NOTICE" "$DST/" || exit 1
 
 # .gitattributes：**这一行不是排版洁癖**。公开仓库要给人 clone，Windows 的 Git 默认
 # core.autocrlf=true，会把文本文件的换行改成 CRLF —— 然后 patch/hdr-auto-l1.patch 的

@@ -179,7 +179,7 @@ vim src/nvn_hdr.h              # src/ 是唯一真相源
 |---|---|
 | 参数层（纯 C） | ✅ **904** 条断言（31 套）全绿，可在 Linux/CI 复跑；含四场景 nit 量化（`t_hdr_quality`） |
 | 补丁可打性 | ✅ 干净 `d5cbf7ff53f7` 树 `git apply` rc=0 |
-| MSL 语法 | ✅ CI `hdr-check` 用 `xcrun -sdk iphoneos metal -std=metal3.0 -c` 真编译（第一次就抓出 MSL 无 `double`，已改 float） |
+| `hdr_hist.metal` 编译 | ✅ 这一个文件（`hdr_hist.metal`）过过 `xcrun -sdk iphoneos metal -std=metal3.0 -c` 编 `hdr_hist.metal`（第一次就抓出 MSL 里没有 `double`，已改 float）。**别的 MSL 不在这条里**，见下一行 |
 | 嵌入规则 | ✅ 本机 `embed_msl.py` 产出 7,756 B 头文件 |
 | GPU 侧接线 | ✅ `present_encode_slot` 每 8 帧（`S2A_HDR_HIST_EVERY`）跑 `clear→add→hdr_hist_l1` + blit 1 KB 直方图回 CPU；判定全在 CPU（真直方图），`float4` 只留作对账日志 |
 | 层变 16F + EDR | ✅ `host_adapt.m` 按 `S2A_HDR_OUTPUT` 选格式并声明 EDR（`S2A_HDR_FMT=1` 只换格式不声明 EDR，用来分辨黑屏归因） |
@@ -224,6 +224,15 @@ vim src/nvn_hdr.h              # src/ 是唯一真相源
 | `fi_commit` 的上屏管线 | `present_pipeline(dr ? dr.texture.pixelFormat : f->cfmt)` |
 
 副作用（明写）：16F 画布下**暂不叠加** AA 与 MetalFX 空间放大，因为这两条链的内部图与上屏管线仍是 8 位。
+
+## 参与与安全
+
+补丁的使用范围、PR 前必须跑的两条命令、会被自动拦下的七类做法、基线怎么迁移，见
+[CONTRIBUTING.md](CONTRIBUTING.md)。安全问题（本补丁新增的 shader、host 适配层、环境
+变量解析）走 [SECURITY.md](SECURITY.md) 的私密渠道，不要开公开 issue 贴可直接利用的 PoC。
+
+这个仓库最缺的证据是**设备实测**：三格矩阵 T1(`S2A_HDR_FMT=1`) / T2(`S2A_HDR_OUTPUT=1,S2A_HDR_FMT=1`)
+/ T3(`S2A_HDR_OUTPUT=1`) 的截图与 `S2A_HDR_LOG=1` 的 `HDR stat:` 行。
 
 ## 许可
 

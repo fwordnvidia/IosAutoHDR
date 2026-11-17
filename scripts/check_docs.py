@@ -70,6 +70,31 @@ for _md in [ROOT / 'README.md'] + sorted((ROOT / 'docs').glob('*.md')):
             if int(_m.group(1)) > _n_groups:
                 fails.append(f'{_md.name}:{_i} 引用第 {_m.group(1)} 组，但投影自检只有 {_n_groups} 组')
 
+# 6) NOTICE（许可与出处声明）里的提交号必须等于 patch/BASELINE 的第一列。
+#    踩过的实例：NOTICE 一直写 v0.4.0 的 `dcd05e5fa84c`，而基线早迁到 `d5cbf7ff53f7`
+#    （2026-11-17）—— 许可文件把下游指到一个错误的补丁适用版本上，这比文档里写错一个
+#    步骤号严重：它是分发时的依据。基线只在 patch/BASELINE 里定义一处，别处引用的提交号
+#    一律拿它比。
+_base_sha = (ROOT / 'patch' / 'BASELINE').read_text(encoding='utf-8').split()[0]
+_notice = (ROOT / 'NOTICE').read_text(encoding='utf-8') if (ROOT / 'NOTICE').exists() else ''
+for _m in re.finditer(r'\b([0-9a-f]{7,40})\b', _notice):
+    _h = _m.group(1)
+    if not _base_sha.startswith(_h) and not _h.startswith(_base_sha[:len(_h)]):
+        fails.append(f'NOTICE 里出现的提交 {_h} 不是 patch/BASELINE 的基线（{_base_sha[:12]}…）')
+if 'jhaizhou-ops/S2Arm' not in _notice:
+    fails.append('NOTICE 没写上游出处（jhaizhou-ops/S2Arm）')
+
+# 7) README 里凡是声称「用 xcrun/metal 真编译过」的 ✅ 行，必须点明编的是哪个 .metal 文件。
+#    踩过的实例：状态表里「MSL 语法 ✅ CI hdr-check 用 xcrun … 真编译」与下一行
+#    「MSL 编译 ⚠️ 只编过两处…HDR fragment 从未过 xcrun metal」在同一张表里互相打脸，
+#    读者只会记住那个 ✅。要么点名文件，要么别打 ✅。
+for _i, _line in enumerate(readme.split('\n'), 1):
+    if 'xcrun' in _line and '✅' in _line:
+        # 只认「xcrun 之后点名的 .metal」：行首写 `hdr_hist.metal` 表格列名不算，
+        # 因为那正是原来那行的样子 —— 列名写着 MSL 语法、内容说的是一次编译。
+        if '.metal' not in _line.split('xcrun', 1)[1]:
+            fails.append(f'README.md:{_i} 用 ✅ 声称 xcrun 真编译，但没点明编的是哪个 .metal 文件')
+
 if fails:
     for f in fails:
         print(f'::error::{f}')

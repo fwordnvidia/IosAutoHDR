@@ -38,8 +38,15 @@ done
 [ "$fail" -eq "$before" ] && ok "无上游整文件（patch/ 里只有 diff 文本，属预期）"
 
 say "3) 不含构建产物与二进制"
-n=$(find . -path ./.git -prune -o \( -name build -o -name __pycache__ \) -print 2>/dev/null | wc -l)
-[ "$n" -eq 0 ] && ok "无 build/ 与 __pycache__/" || bad "有 $n 个产物目录"
+# 判「仓库里有没有」而不是「工作区里有没有」：`./run_all.sh` 会在工作区留下 build/ 与
+# __pycache__/，上一轮自检若在中途失败就没机会清 —— 用 find 判会把「自己的残留」当成
+# 「仓库里有产物」，下一次同步就报「有 1 个产物目录」，看起来像刚提交了文件。
+if [ -d .git ]; then
+    n=$(git ls-files | grep -cE '(^|/)(build|__pycache__)/' || true)
+else
+    n=$(find . -path ./.git -prune -o \( -name build -o -name __pycache__ \) -print 2>/dev/null | wc -l)
+fi
+[ "$n" -eq 0 ] && ok "仓库里没有 build/ 与 __pycache__/（工作区残留不算，见末尾清理）" || bad "仓库里有 $n 个产物目录"
 n=$(find . -path ./.git -prune -o -type f \( -name '*.tar.gz' -o -name '*.bundle' -o -name '*.pyc' -o -name '*.so' -o -name '*.dylib' -o -name '*.o' -o -name '*.a' \) -print 2>/dev/null | wc -l)
 [ "$n" -eq 0 ] && ok "无归档/二进制" || bad "有 $n 个归档或二进制"
 
@@ -56,6 +63,27 @@ say "6) 许可与出处"
 [ -f LICENSE ] && grep -q 'Apache License' LICENSE && ok "LICENSE 是 Apache-2.0 原文" || bad "LICENSE 缺失或不是 Apache-2.0"
 [ -f NOTICE ] && ok "NOTICE 存在（署名上游）" || bad "NOTICE 缺失"
 grep -q 'jhaizhou-ops/S2Arm' README.md 2>/dev/null && ok "README 写明上游出处" || bad "README 未写明上游出处"
+# 许可文件必须与源码树逐字节相同：它们没进白名单很久（手工拷过一次就再没刷新），
+# 投影里那份 NOTICE 甚至是上游的三方清单（列着 GPL bash、Ryujinx，指向投影里不存在的
+# THIRD_PARTY_LICENSES.md）。文件在、内容错，比缺文件更难发现。
+_SRC=${SRC:-/home/sechs/ios-build/hdr-auto}
+for f in LICENSE NOTICE; do
+    if [ -f "$f" ] && [ -f "$_SRC/$f" ] && cmp -s "$f" "$_SRC/$f"; then
+        ok "$f 与源码树逐字节相同"
+    else
+        bad "$f 与 $_SRC/$f 不一致（同步漏了这一步？）"
+    fi
+done
+# 社区档案：GitHub 只在「根级」或「.github/」找 CONTRIBUTING/SECURITY，而投影不带 .github/
+# ⇒ 这两个文件必须在根级存在，否则仓库页永远提示「添加贡献指南」，health 停在 42%。
+for f in CONTRIBUTING.md SECURITY.md; do
+    [ -f "$f" ] && ok "$f 在根级（GitHub 只认根级或 .github/，投影不带后者）" || bad "缺 $f —— 仓库页会一直提示「添加贡献指南」"
+done
+# 两份文件不是摆设：CONTRIBUTING 必须写出「PR 前跑哪两条」，SECURITY 必须写出报告渠道。
+grep -q 'run_all.sh' CONTRIBUTING.md 2>/dev/null && grep -q 'check_projection.sh' CONTRIBUTING.md 2>/dev/null \
+    && ok "CONTRIBUTING.md 写明了 PR 前必跑的两条命令" || bad "CONTRIBUTING.md 没写 PR 前要跑 ./run_all.sh 与 ./scripts/check_projection.sh"
+grep -q 'Report a vulnerability' SECURITY.md 2>/dev/null \
+    && ok "SECURITY.md 写明了私密报告渠道" || bad "SECURITY.md 没有私密报告渠道（GitHub Security Advisories）"
 
 say "7) 基线与文档一致"
 if python3 scripts/check_baseline.py >/dev/null 2>&1; then ok "patch/BASELINE 与 README/PR 对齐"; else bad "基线不一致（跑 python3 scripts/check_baseline.py 看细节）"; fi
@@ -121,6 +149,9 @@ else
 fi
 
 say ""
+# 自检会在工作区跑 run_all（要 build/），中途失败时上面那条 rm 执行不到。
+# 无论成败都清一次，否则下一次「组 3」会先看到自己的残留。
+rm -rf ./build ./__pycache__ ./src/__pycache__ ./scripts/__pycache__ ./tools/__pycache__ 2>/dev/null
 if [ "$fail" -eq 0 ]; then say "✓ 公开投影自检通过：仓库性质与 README 声称一致"; exit 0; fi
 say "✗ $fail 项不通过"
 exit 1

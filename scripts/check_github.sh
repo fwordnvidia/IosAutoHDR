@@ -9,6 +9,9 @@
 #   - 公开、未归档、不是 fork（「公开投影」的定义）
 #   - 不跑定期 CI：远端不能有任何自动触发的 workflow
 #   - 远端 main 的 sha 就是本地投影的 HEAD（不然「已推送」只是本地信念）
+#   - 社区档案（GitHub 自己算的 health_percentage）认得我们的 CONTRIBUTING / SECURITY
+#     —— 「仓库里有这个文件」和「GitHub 把它当成社区档案」是两件事：文件名放错目录
+#     （比如放 docs/ 下）文件在、GitHub 不认，仓库页照样提示「添加贡献指南」。
 #
 # 只读：本脚本不发任何修改请求。需要网络，所以不进 run_all.sh（那样每跑一次闸门都要出门）。
 #
@@ -111,6 +114,35 @@ if [ -d "$HERE/.git" ]; then
 else
     echo "  · 当前目录不是 git 仓库，跳过 HEAD 比对（这条只在投影根有意义）"
 fi
+
+echo "=== 社区档案：GitHub 认不认我们的 CONTRIBUTING / SECURITY ==="
+CP=$(api "/repos/$REPO/community/profile")
+printf '%s' "$CP" > "$TMP/comm.json"
+python3 - "$TMP/comm.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+if "health_percentage" not in d:
+    print(f"  ✗ 取不到社区档案：{str(d)[:160]}")
+    raise SystemExit(1)
+hp = d["health_percentage"]
+files = d.get("files") or {}
+rows = [("CONTRIBUTING", files.get("contributing")), ("SECURITY", files.get("security_policy")),
+        ("LICENSE", files.get("license")), ("README", files.get("readme"))]
+bad = 0
+for name, f in rows:
+    if f and f.get("html_url"):
+        print(f"  ✓ GitHub 认到 {name}：{f.get('path') or f.get('html_url')}")
+    else:
+        print(f"  ✗ GitHub 没认到 {name} —— 文件名要对（CONTRIBUTING.md / SECURITY.md），"
+              f"位置只认根级或 .github/（投影不带 .github/，所以必须放根级）")
+        bad = 1
+print(f"  · health_percentage：{hp}%")
+if hp < 50:
+    print(f"  ✗ 社区档案只有 {hp}%（缺的项见上）—— 仓库页会一直提示「添加贡献指南」")
+    bad = 1
+raise SystemExit(1 if bad else 0)
+PY
+[ $? -eq 0 ] || fail=1
 
 echo "=== 打开仓库能看到的元数据（不影响判定，只提示） ==="
 python3 - "$TMP/repo.json" <<'PY'
