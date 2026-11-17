@@ -19,6 +19,8 @@ concurrency、timeout ≤20 分钟、不许 matrix / `secrets.` / `xcodebuild`�
 （辅助函数必须定义过、提示串不许有反引号、`if/while` 条件里管道末段不许是 tail）→
 `0w17/5` C 警告（46 个带 main 的文件用 `-Wall -Wextra` 重编，正式构建的 `-w` 会遮住全部警告）→
 `0w18/5` Python lint（34 个脚本过 ruff E9/F/B905，`zip` 必须写 `strict=`）→
+`0w19/5` 社区文件结构（`.github/ISSUE_TEMPLATE/*.yml` 的 type/id/attributes/validations 逐项核；
+GitHub 对写错的表单是**静默忽略**——仓库页上不出现，本地却干干净净）→
 `4b/5` 换格式后上游隐含假设（13 条结构断言 + `docs/UPSTREAM-ASSUMPTIONS.md`；**必须排在
 4/5 打补丁之后**——它核的是打完补丁的树，曾经排在前面导致带树根跑 6 条假红）→
 `4c/5` 符号对账（补丁触及的 41 个 C 系文件里，每个 `s2a_*` / `nvn_hdr_*` / `hdr_*` 标识符

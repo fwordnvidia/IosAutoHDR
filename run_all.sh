@@ -186,6 +186,9 @@ step "0w18/5 Python 脚本 lint（34 个脚本：E9 运行时错 + F pyflakes + 
 # （4 处本该等长 ⇒ strict=True 能抓「比了一半就宣布通过」）。
 ./scripts/check_py_lint.sh || fail=1
 
+step "0w19/5 社区文件结构（issue 表单写错时 GitHub 会静默忽略整份）"
+python3 scripts/check_issue_form.py || fail=1
+
 step "0w3/5 文档计数（套数 / 断言总数 / 上屏 fragment 字节数 必须与实测一致）"
 python3 scripts/check_counts.py || fail=1
 
