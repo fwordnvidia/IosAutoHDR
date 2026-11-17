@@ -95,7 +95,7 @@ EXTRA = [
     ("tools/hdr_ref.c", "脱离 S2Arm 的参考 CLI：合成场景、读 PPM、`--stat-line` 打与设备同格式的一行。", "tools/ref_check.sh（43 项）"),
     ("tools/hdr_seq.c", "逐帧跑一段序列，输出拐点/白点/冻结列，用于时间行为（转场、淡入淡出）。", "scripts/report_sequence.py"),
     ("tools/hdr_ablate.c", "四档定拐点策略（fixed / apl / white / full）在同一批帧上的对照。", "scripts/report_ablate.py"),
-    ("tools/hdr_cost.c", "每帧 CPU 开销（`step_fused` 0.57 µs）。", "scripts/report_cost.py"),
+    ("tools/hdr_cost.c", "每帧 CPU 开销（`step_fused` 的具体数值见 `docs/COST.md`，不在两处各写一个）。", "scripts/report_cost.py"),
     ("tools/hdr_device_image.c", "整幅跑「MSL 链路」与「CPU 链路」两遍，逐像素对账。", "run_all.sh 0t/5"),
     ("tools/hdr_shader_image.c", "上屏 fragment 的 C 转写作用到整幅照片，与 CPU 版逐像素对账。", "run_all.sh（整幅对账）"),
     ("tools/hdr_color_image.c", "逐像素 CIELAB：色相角误差与 a*/b* 位移。", "scripts/report_color_image.py"),
@@ -236,6 +236,13 @@ def _target(f):
 
 def main():
     text = render()
+    # 投影形态：这份文档是在**开发树**里扫 src/ 生成的，而公开仓库按设计不含上游整文件
+    # （src/nvn_mtl.m 1.9 MB 等）。投影里重算必然得到不同结果——不是文档旧了，是没有对象可扫。
+    # 2026-11-17 之前在 clone 下来的投影里 ./run_all.sh 会红在这一步。
+    if "--check" in sys.argv and not os.path.exists(os.path.join(HERE, "src/nvn_mtl.m")):
+        print("· 投影形态：没有上游整文件 ⇒ 跳过这份快照的漂移校验")
+        print("  文档本身仍随投影发布（给人读）；一致性由开发树的 0w 段保证")
+        return 0
     if "--check" in sys.argv:
         if not os.path.exists(DOC) or open(DOC, encoding="utf-8").read() != text:
             print("::error::docs/REVIEW.md 与仓库状态不一致（改了 src/ 或补丁文件清单没重新生成？）")

@@ -106,6 +106,20 @@ else
     fi
 fi
 
+say "11) clone 下来就能跑：./run_all.sh（不带树根）必须绿"
+# 2026-11-17 才发现的问题：投影里跑 ./run_all.sh 会红 4 处，因为好几个检查假定「有上游整文件」
+# （src/nvn_mtl.m 1.9 MB、src/nvn_present_fi.inc、src/host_adapt.m）与「带 .github」，
+# 而投影按设计两者都没有 ⇒ 使用者第一步就看到 ::error::，会以为补丁坏了。
+# 现在这些步骤在缺上游文件时明确打印「投影形态：跳过」。这一组把「还是不是绿的」钉住。
+if [ ! -x ./run_all.sh ]; then
+    bad "没有可执行的 run_all.sh（第 7 组应该已经抓到）"
+elif ./run_all.sh >/tmp/proj_runall.log 2>&1; then
+    ok "投影里 ./run_all.sh 通过（$(grep -c '^  ✓' /tmp/proj_runall.log) 个 ✓；$(grep -c '投影形态' /tmp/proj_runall.log) 步按设计跳过）"
+    rm -rf ./build   # run_all 会生成 build/，别留在工作树里
+else
+    bad "投影里 ./run_all.sh 失败：$(grep -m1 '✗' /tmp/proj_runall.log | sed 's/^ *//')"
+fi
+
 say ""
 if [ "$fail" -eq 0 ]; then say "✓ 公开投影自检通过：仓库性质与 README 声称一致"; exit 0; fi
 say "✗ $fail 项不通过"

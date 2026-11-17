@@ -42,9 +42,18 @@ def read(path):
 
 def main():
     problems = []
+    require = "--require" in sys.argv
     if not os.path.isfile(WF):
-        print("✗ 找不到 %s" % os.path.relpath(WF, ROOT))
-        return 1
+        # 投影默认**不带** .github（推 workflow 文件要 PAT 有 workflow scope，不为它扩权），
+        # 所以在 clone 下来的投影里没有它是正常形态，不是失败——2026-11-17 之前这里直接
+        # `✗ 找不到 .github/workflows/verify.yml`，让使用者以为仓库坏了。
+        # 开发树必须带上它，那一侧靠 --require（scripts/check_repo_hygiene.sh 用它）。
+        if require:
+            print("✗ 找不到 %s（--require：开发树必须带这个 workflow）" % os.path.relpath(WF, ROOT))
+            return 1
+        print("· 没有 .github/workflows/verify.yml（投影默认不带 CI 文件）⇒ 跳过")
+        print("  开发树自检请加 --require；SYNC_CI=1 同步后再跑本脚本即为严格模式")
+        return 0
     raw = read(WF)
     try:
         doc = yaml.safe_load(raw)

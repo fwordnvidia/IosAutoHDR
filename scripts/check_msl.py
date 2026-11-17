@@ -38,6 +38,12 @@ def extract():
     down/match/spread，与 `fi_copy_setup` 的缩拷 vs/fs），它们一直**不在**这个守卫里 ——
     而 to_enc（HDR 线性→编码域）恰恰是那段里最容易写错的东西。按出现序号各写一个文件。
     """
+    # 投影形态：MSL 源码在**上游整文件**里（src/nvn_mtl.m 1.9 MB、src/nvn_present_fi.inc），
+    # 公开仓库按设计只交付差分 ⇒ 这里没有可抽的东西。返回 None 让 main 打印「跳过」，
+    # 而不是抛 CalledProcessError（2026-11-17 之前投影里 ./run_all.sh 会在这一步吐 traceback，
+    # 而 `| tail -1` 把它压成一行，看起来像「什么都没说但红了」）。
+    if not os.path.exists(os.path.join(HERE, "src", "nvn_mtl.m")):
+        return None
     script = os.path.join(HERE, "scripts", "extract_msl.py")
     os.makedirs(TMP, exist_ok=True)
     subprocess.run([sys.executable, script, os.path.join(HERE, "src", "nvn_mtl.m"), "--dir", TMP],
@@ -94,6 +100,10 @@ def func_bodies(src):
 
 def main():
     files = extract()
+    if files is None:
+        print("· 投影形态：没有 src/nvn_mtl.m（MSL 源码在上游整文件里）⇒ 跳过结构守卫")
+        print("  这一层要在带上游树的开发树里跑；投影里只能保证补丁本身能被 apply")
+        return 0
     fails, checks = 0, 0
 
     def check(cond, msg):

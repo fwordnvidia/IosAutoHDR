@@ -78,7 +78,7 @@
 | `tools/hdr_ref.c` | 脱离 S2Arm 的参考 CLI：合成场景、读 PPM、`--stat-line` 打与设备同格式的一行。 | tools/ref_check.sh（43 项） |
 | `tools/hdr_seq.c` | 逐帧跑一段序列，输出拐点/白点/冻结列，用于时间行为（转场、淡入淡出）。 | scripts/report_sequence.py |
 | `tools/hdr_ablate.c` | 四档定拐点策略（fixed / apl / white / full）在同一批帧上的对照。 | scripts/report_ablate.py |
-| `tools/hdr_cost.c` | 每帧 CPU 开销（`step_fused` 0.57 µs）。 | scripts/report_cost.py |
+| `tools/hdr_cost.c` | 每帧 CPU 开销（`step_fused` 的具体数值见 `docs/COST.md`，不在两处各写一个）。 | scripts/report_cost.py |
 | `tools/hdr_device_image.c` | 整幅跑「MSL 链路」与「CPU 链路」两遍，逐像素对账。 | run_all.sh 0t/5 |
 | `tools/hdr_shader_image.c` | 上屏 fragment 的 C 转写作用到整幅照片，与 CPU 版逐像素对账。 | run_all.sh（整幅对账） |
 | `tools/hdr_color_image.c` | 逐像素 CIELAB：色相角误差与 a*/b* 位移。 | scripts/report_color_image.py |

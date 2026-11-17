@@ -16,6 +16,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT = ['src/nvn_mtl.m', 'src/nvn_present_fi.inc', 'src/host_adapt.m']
 
+# 投影形态：公开仓库（/home/sechs/hdr-auto-release）按设计**不含上游整文件** ——
+# src/nvn_mtl.m 有 1.9 MB，patch 只交付差分，不搬整文件。所以「调用点实参个数」这一层
+# 在投影里无从做起：不是通过，是根本没有对象可比。2026-11-17 之前它在这里报
+# 「定点回归缺文件 src/nvn_mtl.m」+「✗ 实参个数不符：6 处」，看起来像补丁坏了。
+if not (ROOT / 'src/nvn_mtl.m').exists():
+    print('· 投影形态：没有 src/nvn_mtl.m（上游整文件按设计不入库）⇒ 跳过调用点对账')
+    print('  这一层只在带上游树的开发树里有效；如果你本以为在开发树里，先看 src/ 是不是丢了上游文件')
+    sys.exit(0)
+
 def strip_comments(s):
     """去注释但保留字符串与字符字面量（字符串里的 // 不是注释）。"""
     out = []

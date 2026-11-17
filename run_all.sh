@@ -46,8 +46,11 @@ step "0e/5 色相误差（docs/COLOR.md：Lab 缩放 vs 线性锚定）"
 python3 scripts/report_color.py --check || fail=1
 
 step "0f/5 MSL 静态守卫（没有 Metal 编译器时挡已知雷区）"
-python3 scripts/check_msl.py >/dev/null || fail=1
-python3 scripts/check_msl.py | tail -1
+# 曾经是 `check_msl.py | tail -1` —— 管道让 traceback 只剩最后一行，而 `tail` 的退出码
+# 永远是 0，于是「脚本崩了」与「守卫通过」在日志里长得一样。2026-11-17 在投影 clone 里
+# 就是靠 `bash -x` 才看出那行 `fail=1` 来自 check_msl 的 CalledProcessError。
+python3 scripts/check_msl.py >/tmp/msl.log 2>&1 || { tail -3 /tmp/msl.log; fail=1; }
+tail -1 /tmp/msl.log
 
 step "0g/5 消融报告（四档策略对照）"
 python3 scripts/report_ablate.py --check || fail=1
@@ -151,6 +154,9 @@ step "0w14/5 补丁统计三处一致（文件数 / ±行数 / sha256 必须与�
 python3 scripts/check_patch_stats.py --check || fail=1
 
 step "0w15/5 CI workflow 只手动跑（无 push/PR 触发、有 concurrency、timeout ≤20 分钟、基线不漂移）"
+# 投影默认不带 .github（推 workflow 要 PAT 的 workflow scope，不为一个 CI 文件扩权），
+# 所以这里不加 --require：没有 workflow 时脚本打印「跳过」并返回 0，而不是让 clone 的人
+# 以为仓库坏了。开发树缺 workflow 由 scripts/check_repo_hygiene.sh 的第 2b 组判红。
 python3 scripts/check_workflow_guard.py || fail=1
 
 step "0w16/5 仓库自己的 shell（shellcheck -S warning + 调用的辅助函数必须有定义）"

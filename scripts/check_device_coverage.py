@@ -100,6 +100,17 @@ def main():
     fails = []
     registered = {d[0]: d for d in DEVICE}
 
+    # 投影形态：登记表里一半的条目指向上游整文件（src/nvn_mtl.m 1.9 MB、
+    # src/nvn_present_fi.inc、src/host_adapt.m），而公开仓库按设计只交付差分。
+    # 没有这些文件时逐条报「声明的文件不存在」是错的——那不是登记缺失，是没有对象可查。
+    # 2026-11-17 之前在 clone 下来的投影里跑 ./run_all.sh 会看到 14 处 ::error::。
+    missing_upstream = [r for r in ('src/nvn_mtl.m', 'src/nvn_present_fi.inc', 'src/host_adapt.m')
+                        if not os.path.exists(os.path.join(ROOT, r))]
+    if missing_upstream:
+        print("· 投影形态：没有上游整文件（%s）⇒ 跳过设备侧登记核对" % "、".join(missing_upstream))
+        print("  这一层只在带上游树的开发树里有效：登记表核对的是「声明的调度点在源码里真的存在」")
+        return 0
+
     # 1) hdr_hist.metal 里每个 kernel 都必须登记（漏登记 = 新增了没人管的设备侧代码）
     for k in kernels_in_metal():
         if k not in registered:

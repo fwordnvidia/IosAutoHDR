@@ -56,10 +56,28 @@ def main():
             print("::error::%s:%d：调用了 %s \"…\"，但这个文件没定义 %s()" % (rel, line, name, name))
             print("  ⇒ 运行时会打「%s: not found」到 stderr，而 fail 不会被置 1 —— 假绿" % name)
             bad += 1
+    # 第二条：提示字符串里不许出现反引号。
+    # 在 sh 双引号内 `` `…` `` 是**命令替换**，不是排版。踩过两次：
+    #   1) `ok ".gitattributes 有 \`* -text\`（…）"` → shell 去执行 `*`（glob 成 LICENSE 等）→
+    #      `LICENSE: Permission denied`，提示空白，shellcheck 报 SC2211 才看出来；
+    #   2) `say "11) … \`./run_all.sh\`（不带树根）必须绿"` → 真的把 run_all 跑了一遍，
+    #      它的「✓ 全部通过」被插进标题里，而 shellcheck **不报**（这是合法的命令替换）。
+    # 第 2 次说明：只靠 shellcheck 挡不住，要一条自己的规则。
+    BT_RE = re.compile(r'\b(?:say|ok|bad|step|note|warn)\b.*`')
+    for path in files():
+        for i, ln in enumerate(open(path, encoding="utf-8", errors="replace"), 1):
+            t = ln.strip()
+            if t.startswith("#"):
+                continue   # 注释里的反引号不执行（这条规则是给提示串的）
+            if BT_RE.search(ln):
+                print("::error::%s:%d：提示字符串里有反引号 —— 在 sh 双引号里它是命令替换，会被执行"
+                      % (os.path.relpath(path, ROOT), i))
+                bad += 1
     if bad:
         print("✗ shell 辅助函数检查：%d 处" % bad)
         return 1
-    print("✓ shell 辅助函数检查：%d 个脚本里调用的 ok/bad/step/… 都有定义" % len(files()))
+    print("✓ shell 辅助函数检查：%d 个脚本里调用的 ok/bad/step/… 都有定义，提示串里没有反引号"
+          % len(files()))
     return 0
 
 

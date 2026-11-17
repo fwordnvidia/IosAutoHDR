@@ -196,6 +196,13 @@ def main():
     if text is None:
         return 1
     rows, envs = info
+    # 投影形态：这份文档是在**开发树**里扫 src/ 生成的，而公开仓库按设计不含上游整文件
+    # （src/nvn_mtl.m 1.9 MB 等）。投影里重算必然得到不同结果——不是文档旧了，是没有对象可扫。
+    # 2026-11-17 之前在 clone 下来的投影里 ./run_all.sh 会红在这一步。
+    if "--check" in sys.argv and not os.path.exists(os.path.join(HERE, "src/nvn_mtl.m")):
+        print("· 投影形态：没有上游整文件 ⇒ 跳过这份快照的漂移校验")
+        print("  文档本身仍随投影发布（给人读）；一致性由开发树的 0w 段保证")
+        return 0
     if "--check" in sys.argv:
         if not os.path.exists(DOC) or open(DOC, encoding="utf-8").read() != text:
             print("::error::docs/OPTIONS.md 与源码不一致（加了常数/改了注释？跑一次不带 --check）")
