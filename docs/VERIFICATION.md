@@ -28,7 +28,11 @@ concurrency、timeout ≤20 分钟、不许 matrix / `secrets.` / `xcodebuild`�
 `4d/5` MSL 符号对账（`4c/5` 剥字符串时把 MSL 源码整个剥掉了，所以着色器那一层要单独核：
 `nvn_mtl.m` 的 `src_msl` / `src_msl_hdr`、`nvn_present_fi.inc` 的两段、`hdr_hist.metal`
 里的 `s2a_*` / `nvn_hdr_*` / `hdr_*` / `to_*` 标识符，每个都必须在这些 MSL 源码的定义位置
-出现过——3555 B 的 HDR fragment 从未过 `xcrun metal`，`to_enc`→`to_encd` 这种错只有这里能红）
+出现过——3555 B 的 HDR fragment 从未过 `xcrun metal`，`to_enc`→`to_encd` 这种错只有这里能红） →
+`4e/5` 补丁新鲜度（`src/` 是唯一真相源、补丁是它的**产物**：遍历 `src/*` 按
+`make_patch.sh` 的同一套映射算出树里路径并逐字节比较，反向再要求补丁里每个文件都有
+`src/` 来源。不同步时 4/5 测的是补丁里的旧内容、`check_counts`/`check_msl` 核的是
+`src/` 里的新内容——一半闸门测旧一半测新，仍然全绿；这一条就是拦它）
 
 它不做的事：
 编译 MSL、编译 ObjC、链接、真机——见文末。

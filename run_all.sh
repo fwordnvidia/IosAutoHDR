@@ -268,9 +268,13 @@ if [ $# -ge 1 ]; then
     # 只有 `xcrun metal` 会报，而 3555 B 的 HDR fragment 从未真编过 ⇒ 单独对账一次。
     step "4d/5 MSL 符号对账（着色器里每个前缀符号都得在 MSL 里有定义）"
     python3 scripts/check_msl_symbols.py "$1" || fail=1
+    # 补丁是发货内容、src/ 是真相源。两份东西不同步时，4/5 测的是补丁里的旧内容、
+    # check_counts/check_msl 核的是 src 里的新内容 —— 一半闸门测旧、一半测新，全绿。
+    step "4e/5 补丁新鲜度（src/ 与补丁打出来的树逐字节一致）"
+    python3 scripts/check_patch_fresh.py "$1" || fail=1
 else
     echo "  跳过（没给树根）；CI 里由 verify.yml 完成这一步"
-    echo "  （4b/5 格式假设、4c/5 C 符号对账、4d/5 MSL 符号对账也要树根，一并跳过：它们要对着打补丁后的源码核）"
+    echo "  （4b/5 格式假设、4c/5 C 符号对账、4d/5 MSL 符号对账、4e/5 补丁新鲜度也要树根，一并跳过）"
 fi
 
 step "5/5 结论"
