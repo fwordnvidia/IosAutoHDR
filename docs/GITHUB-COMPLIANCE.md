@@ -1,7 +1,7 @@
 # 本仓库的合规约定（可验证，不是承诺）
 
 这个仓库只做一件事：**交付一个补丁**。它不构建 App、不分发二进制、不跑定期 CI。
-下面每一条都能用 `./scripts/check_projection.sh` 在本地核验（一条命令，9 组检查）。
+下面每一条都能用 `./scripts/check_projection.sh` 在本地核验（一条命令，11 组检查——组数由 `check_docs.py` 第 5 条核，不手抄）。
 
 ```sh
 git clone https://github.com/fwordnvidia/IosAutoHDR
@@ -9,12 +9,16 @@ cd IosAutoHDR && ./scripts/check_projection.sh
 # → ✓ 公开投影自检通过：仓库性质与 README 声称一致
 ```
 
+这份文件里写的组数不是手抄的：`scripts/check_docs.py` 第 5 条数 `check_projection.sh` 里
+的 `say "N) …"` 标题，与本文出现的「N 组检查」逐字比对——2026-11-18 之前这里写「9 组」，
+而脚本已经加到 11 组，合规文档自己报的数不准，读者按它核对时会以为少跑了两组。
+
 ## 一、这个仓库**不做**什么
 
 | 不做 | 怎么核验 |
 | --- | --- |
 | 不跑定期 CI | 源码树里的 `workflows/verify.yml` **只接受 `workflow_dispatch`**，出现 push / pull_request / schedule 即失败（`0w15/5`）。投影默认不带它——推它需要 PAT 的 `workflow` scope，不为一个 CI 文件去扩权 |
-| 不并发起虚机 | 该 workflow 有 `concurrency`（同 ref 只跑一个）与 `timeout-minutes: 20`，且**不许用 `matrix`**（那是「一次点按起 N 台」的另一种写法）；本机 `check_workflow_guard.py` 逐条核（投影里带上时由第 9 组再核一次） |
+| 不并发起虚机 | 该 workflow 有 `concurrency`（同 ref 只跑一个）与 `timeout-minutes: 20`，且**不许用 `matrix`**（那是「一次点按起 N 台」的另一种写法）；本机 `check_workflow_guard.py` 逐条核（投影里带上时由 `./scripts/check_projection.sh` 第 9 组再核一次） |
 | 不用 runner 构建 App | workflow 里禁止出现 `xcodebuild` 与 `make`；它只做三件事：`xcrun metal` 编 shader、常数对账、`clang -fsyntax-only` |
 | 不含上游整文件 | 无 `nvn_mtl.m` / `host_adapt.m` / `nvn_present_fi.inc`；`patch/` 里只有 diff 文本 |
 | 不含构建产物 | 无 `build/`、`__pycache__/`、`*.tar.gz`、`*.bundle`、`*.o`、`*.so` |

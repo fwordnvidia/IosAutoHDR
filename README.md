@@ -53,6 +53,7 @@ SpecialK / BT.2087 / BT.2408-8 / Apple EDR / Microsoft scRGB，每条都写「�
 ./scripts/check_msl_symbols.py <树>     # 着色器里每个前缀符号都得在 MSL 里有定义（3555 B HDR fragment 从未真编）
 ./scripts/check_patch_fresh.py <树>     # src/ 与补丁打出来的树逐字节一致（补丁是发货内容，src 是真相源）
 ./scripts/check_patch_tools.sh <树>     # git apply 与 GNU patch -p1 结果逐字节一致（别让使用者跑出我们没测的那份）
+./scripts/check_github.sh              # 远端状态与仓库声称一致（许可/分支/无自动 CI/HEAD 同源；要网络，不在 run_all 里）
 ./scripts/check_upstream.sh      # 上游默认分支/tag 各在哪、补丁还能不能干净打上、是否纯增量
 ./scripts/check_upstream.sh --full  # 同上，再就地打上并跑完整闸门（2.5 分钟，这才是"行为没变"的证据）
 ./scripts/rehearse_ci.py         # 把 verify.yml 的 run: 块在 Linux 上真跑一遍（挖掉 macOS 专属行）

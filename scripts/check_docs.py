@@ -29,7 +29,7 @@ for r in sorted(refs):
 # 仓库级脚本（mirror_vultr.sh、check_repo_hygiene.sh）住在完整工作树的 scripts/，不进投影，不在本表。
 ENTRY = ['rebase_patch.sh', 'verify_upstream.sh', 'baseline_report.sh', 'make_patch.sh',
          'sanitize.sh', 'check_projection.sh', 'publish.sh', 'sync_release.sh', 'check_callsites.py', 'check_device_coverage.py', 'report_fi_domain.py', 'check_format_assumptions.py',
-         'check_patch_symbols.py', 'check_msl_symbols.py', 'check_patch_fresh.py', 'check_patch_tools.sh',
+         'check_patch_symbols.py', 'check_msl_symbols.py', 'check_patch_fresh.py', 'check_patch_tools.sh', 'check_github.sh',
          'check_device_log.py', 'check_msl.py', 'fetch_device_log.sh', 'check_shell_helpers.py', 'check_c_warnings.sh', 'check_py_lint.sh', 'rehearse_ci.py']
 for e in ENTRY:
     if e not in readme:
@@ -51,6 +51,24 @@ for _md in sorted((ROOT / 'docs').glob('*.md')):
     for _m in re.finditer(r'`([0-9a-z]+/5)`', _md.read_text(encoding='utf-8')):
         if _m.group(1) not in _real_steps:
             fails.append(f'{_md.name} 引用了不存在的步骤 {_m.group(1)}（run_all.sh 里没有这个 step）')
+
+# 5) 提到 `check_projection.sh` 的地方，如果写了组数（「11 组检查」/「第 9 组」），必须与
+#    脚本里真实的组数一致。踩过的实例：GITHUB-COMPLIANCE.md 一直写「一条命令，9 组检查」，
+#    而脚本早就加到 11 组 —— 合规文档自己报的数不准，读者按它去核对时会以为少跑了两组。
+#    这里只认「N 组检查/自检」与同一行里的「第 N 组」，因为别处的「第 13 组」指的是
+#    C 单测内部的断言分组，与投影自检无关。
+_proj = (ROOT / 'scripts' / 'check_projection.sh').read_text(encoding='utf-8')
+_n_groups = len(re.findall(r"^\s*say ['\"]\d+\)", _proj, re.M))
+for _md in [ROOT / 'README.md'] + sorted((ROOT / 'docs').glob('*.md')):
+    for _i, _line in enumerate(_md.read_text(encoding='utf-8').split('\n'), 1):
+        if 'check_projection.sh' not in _line and '投影自检' not in _line:
+            continue
+        for _m in re.finditer(r'(\d+)\s*组(?:检查|自检)', _line):
+            if int(_m.group(1)) != _n_groups:
+                fails.append(f'{_md.name}:{_i} 说投影自检有 {_m.group(1)} 组，实际 {_n_groups} 组')
+        for _m in re.finditer(r'第\s*(\d+)\s*组', _line):
+            if int(_m.group(1)) > _n_groups:
+                fails.append(f'{_md.name}:{_i} 引用第 {_m.group(1)} 组，但投影自检只有 {_n_groups} 组')
 
 if fails:
     for f in fails:

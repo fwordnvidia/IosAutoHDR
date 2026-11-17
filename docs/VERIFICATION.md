@@ -36,6 +36,12 @@ concurrency、timeout ≤20 分钟、不许 matrix / `secrets.` / `xcodebuild`�
 `4f/5` 两种打补丁工具结果一致（我们全程 `git apply`，使用者手上可能只有 GNU `patch`：
 把它打进临时副本，再与 `git apply` 的结果 `diff -r` 逐字节比；两边都不许留 `.rej`/`.orig`，
 GNU patch 也不许报 `with fuzz`——fuzz 意味着上下文差几行它自己贴偏了）
+ 
+另有一条**不在** `run_all.sh` 里、要出门的检查：`scripts/check_github.sh`。前面所有闸门都只核
+本地这棵树，而 README 与 `docs/GITHUB-COMPLIANCE.md` 还有一批只有 GitHub 知道的声称——
+许可（GitHub 自己识别的 `spdx_id` 是不是 `Apache-2.0`）、默认分支是不是 `main`、是否公开/
+未归档/非 fork、远端有没有自动触发的 workflow、远端 `main` 的 sha 是不是本地投影的 HEAD。
+只读，不发任何修改请求；因为要网络，所以不进 `run_all.sh`。
 
 它不做的事：
 编译 MSL、编译 ObjC、链接、真机——见文末。
