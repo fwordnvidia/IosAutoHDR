@@ -51,6 +51,7 @@ SpecialK / BT.2087 / BT.2408-8 / Apple EDR / Microsoft scRGB，每条都写「�
 ./scripts/check_py_lint.sh           # 34 个 Python 脚本过 ruff（E9/F/B905；需 Python ≥ 3.10）
 ./scripts/check_upstream.sh      # 上游默认分支/tag 各在哪、补丁还能不能干净打上、是否纯增量
 ./scripts/check_upstream.sh --full  # 同上，再就地打上并跑完整闸门（2.5 分钟，这才是"行为没变"的证据）
+./scripts/rehearse_ci.py         # 把 verify.yml 的 run: 块在 Linux 上真跑一遍（挖掉 macOS 专属行）
 ./scripts/publish.sh --preflight # 只读核对：上游是否又前进、正文 sha 是否过期、gh 能不能用
 ./scripts/publish.sh             # dry-run：只打印要执行的命令
 ./scripts/publish.sh --yes       # fork → 分支 hdr-auto/l1b → push → gh pr create（正文用 docs/PR.md）
