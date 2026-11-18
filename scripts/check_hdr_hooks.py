@@ -17,6 +17,8 @@
   H5 降级块同时改像素格式与颜色空间（只改格式 ⇒ 画面发灰发亮，比黑屏更难查）
   H6 回头路块把 16F / EDR / 扩展线性 sRGB 三件一起装回去
   H7 tick 第一次真读到上界就打一行「已启用」——没有正面证据就没法在设备日志里判活
+  H8 `host_adapt.m` 的 iOS / Mac 两个分支都必须给出图层调 `s2a_out_layer_hdr()`，
+     且那个函数要同时设 EDR 声明与扩展线性 sRGB —— 少一侧，那侧的 HDR 就静默不生效
 
 用法：scripts/check_hdr_hooks.py [树根]（缺省用 src/ 里的真相源，不需要树）
 """
@@ -125,6 +127,31 @@ def main():
             if pat not in rb:
                 fails.append("H6:%d 回头路块没把 %s 装回去 —— 重新试探的 16F 画布会缺一角" % (j0 + rearm[0], why))
 
+    # H8：图层 HDR 属性在 host_adapt.m 里设（nvn_mtl 只负责运行时跟随）。两个分支各一次调用，
+    #     少一侧那条路径的 HDR 就是静默不生效 —— 与 Metal 3 那次同一个病，只是换了个文件。
+    ha = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src", "host_adapt.m")
+    if os.path.exists(ha):
+        hat = read(ha)
+        calls = [i + 1 for i, l in enumerate(hat) if "s2a_out_layer_hdr(" in l and "static void s2a_out_layer_hdr" not in l]
+        # 一次是 iOS 分支、一次是 Mac 分支；少于 2 处就说明有一侧没设
+        if len(calls) < 2:
+            fails.append("H8:%d host_adapt.m 只有 %d 处调用 s2a_out_layer_hdr()（iOS 与 Mac 两个分支各需一处）"
+                         "—— 少的那一侧 EDR 声明与颜色空间都没设，HDR 静默不生效"
+                         % (calls[0] if calls else 1, len(calls)))
+        try:
+            _i, _j, blines = block(hat, "static void s2a_out_layer_hdr(", "s2a_out_layer_hdr()")
+        except SystemExit:
+            blines = None
+        if blines:
+            body = "\n".join(blines)
+            for pat, why in (("s2a_out_edr_wanted()", "EDR 意图判据"),
+                             ("wantsExtendedDynamicRangeContent = YES", "EDR 声明"),
+                             ("kCGColorSpaceExtendedLinearSRGB", "扩展线性 sRGB 颜色空间")):
+                if pat not in body:
+                    fails.append("H8 s2a_out_layer_hdr() 里缺 %s —— 图层只拿到像素格式、没有 HDR 声明" % why)
+        else:
+            fails.append("H8 找不到 s2a_out_layer_hdr() 的函数体")
+
     # 附：纯 C 侧的让位判据必须与 itm_params 同一套解析（两者都在 nvn_hdr.h，改了要对齐）
     hdr = "\n".join(read(HDR))
     if "s2a_hdr_env_pinned" not in hdr:
@@ -135,7 +162,7 @@ def main():
     if fails:
         print("✗ HDR 钩子检查：%d 处" % len(fails))
         return 1
-    print("✓ HDR 钩子：图层每帧记、两处 tick、让位判据、降级与回头路成对、跟随有正面日志（%d 条）" % 7)
+    print("✓ HDR 钩子：图层每帧记、两处 tick、让位判据、降级与回头路成对、跟随有正面日志（%d 条）" % 8)
     return 0
 
 
