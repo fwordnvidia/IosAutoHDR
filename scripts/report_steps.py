@@ -45,7 +45,10 @@ def render(rows):
     }
     prose["README.md"] = (ROOT / "README.md").read_text(encoding="utf-8")
     for sid, title in rows:
-        where = [n for n, t in prose.items() if sid in t]
+        # 必须按「步骤号」整体匹配：`0/5` 是 `0w20/5`、`10/5` 的子串，直接 `in` 会把
+        # 别人的提及算到自己头上（第一版就这样把 DESIGN.md 算给了 `0/5`）。
+        _pat = re.compile(r'(?<![0-9a-z])%s(?![0-9])' % re.escape(sid))
+        where = [n for n, t in prose.items() if _pat.search(t)]
         lines.append("| `%s` | %s | %s |" % (sid, title.strip() or "—", "、".join(where) if where else "（仅索引）"))
     lines += ["", "共 %d 个步骤。" % len(rows), ""]
     return "\n".join(lines)

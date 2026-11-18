@@ -160,6 +160,21 @@ for _md in [ROOT / 'README.md'] + sorted((ROOT / 'docs').glob('*.md')):
                 fails.append(f'{_md.name}:{_i} 写 {_rel}:{_ln} {_sym}()，但那附近没有它'
                              f'（文件共 {len(_lines)} 行）{_tip}')
 
+# 11) 文档里写「N 条不变量」时，N 必须等于 check_hdr_hooks.py 现算的条数（它自己在收尾行报）。
+#     踩过的实例：H7 加上之后脚本报 7 条，而 docs/DESIGN.md 还写着「`0w20/5` 的 6 条不变量」。
+#     与第 8 条（自测项数）同一类：手写的「几条」迟早会和代码分家。
+_hk = subprocess.run([sys.executable, str(ROOT / 'scripts' / 'check_hdr_hooks.py')],
+                     capture_output=True, text=True)
+_hm = re.search(r'（(\d+) 条）', _hk.stdout)
+if _hm:
+    _hook_n = int(_hm.group(1))
+    for _md in [ROOT / 'README.md'] + sorted((ROOT / 'docs').glob('*.md')):
+        for _i, _line in enumerate(_md.read_text(encoding='utf-8').split('\n'), 1):
+            for _m in re.finditer(r'(\d+)\s*条(?:结构)?不变量', _line):
+                if int(_m.group(1)) != _hook_n:
+                    fails.append(f'{_md.name}:{_i} 写 {_m.group(1)} 条不变量，而 check_hdr_hooks.py 现在 '
+                                 f'报 {_hook_n} 条 —— 数字要么现算，要么别写死')
+
 if fails:
     for f in fails:
         print(f'::error::{f}')

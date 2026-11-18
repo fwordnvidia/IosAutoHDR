@@ -5,7 +5,7 @@
 
 | 步骤 | 标题 | 叙述在 |
 | --- | --- | --- |
-| `0/5` | 量化报告（docs/QUALITY.md 必须与实测一致） | DESIGN.md、VERIFICATION.md、README.md |
+| `0/5` | 量化报告（docs/QUALITY.md 必须与实测一致） | VERIFICATION.md、README.md |
 | `0b/5` | 真实内容验证（docs/REAL-CONTENT.md 必须与实测一致） | （仅索引） |
 | `0c/5` | 时间行为（真实照片 60 帧序列，判缓慢运动不抖、纸白不动） | （仅索引） |
 | `0d/5` | 使用者命令 hdr_convert（值域 / 纸白不动 / 色域真生效 / 抖动只动最低位） | （仅索引） |
@@ -52,10 +52,10 @@
 | `0v/5` | 图像级用例（夜景 / HUD / 字幕 / 淡出） | VERIFICATION.md |
 | `0u/5` | knee 原子发布（撕裂读写模型） | VERIFICATION.md |
 | `0t/5` | 设备链路整幅对账（分箱逐格 → L1 白点/重心 → 上屏画面） | REVIEW.md、VERIFICATION.md |
-| `1/5` | 参考 CLI 自检（40 项） | DEVICE-ONLY.md、VERIFICATION.md |
+| `1/5` | 参考 CLI 自检（40 项） | VERIFICATION.md |
 | `2/5` | HUD 剔除常数平台区 | VERIFICATION.md |
 | `3/5` | 曲线图 | VERIFICATION.md |
 | `4/5` | 补丁自洽（在干净树上打补丁 + 全部单测） | REVIEW.md、VERIFICATION.md |
-| `5/5` | 结论 | GITHUB-COMPLIANCE.md、VERIFICATION.md、README.md |
+| `5/5` | 结论 | （仅索引） |
 
 共 52 个步骤。
