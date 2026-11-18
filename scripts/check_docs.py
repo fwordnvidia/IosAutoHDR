@@ -175,6 +175,21 @@ if _hm:
                     fails.append(f'{_md.name}:{_i} 写 {_m.group(1)} 条不变量，而 check_hdr_hooks.py 现在 '
                                  f'报 {_hook_n} 条 —— 数字要么现算，要么别写死')
 
+# 12) 文档里写「N 项：M 项有对账、K 项写明理由」时，三个数都必须等于 check_device_coverage.py 现算的。
+#     踩过的实例：登记表从 13 项长到 14 项，docs/VERIFICATION.md 的步骤链还写着「13 项：12 项有对账」。
+_dc = subprocess.run([sys.executable, str(ROOT / 'scripts' / 'check_device_coverage.py'), '--check'],
+                     capture_output=True, text=True)
+_dm = re.search(r'(\d+) 项，(\d+) 项有对账，(\d+) 项写明理由', _dc.stdout)
+if _dm:
+    _want = tuple(int(x) for x in _dm.groups())
+    for _md in [ROOT / 'README.md'] + sorted((ROOT / 'docs').glob('*.md')):
+        for _i, _line in enumerate(_md.read_text(encoding='utf-8').split('\n'), 1):
+            for _m in re.finditer(r'(\d+) 项：(\d+) 项有对账[、，]\s*(\d+) 项写明理由', _line):
+                _got = tuple(int(x) for x in _m.groups())
+                if _got != _want:
+                    fails.append(f'{_md.name}:{_i} 写「{_got[0]} 项：{_got[1]} 项有对账、{_got[2]} 项写明理由」，'
+                                 f'而 check_device_coverage.py 现算「{_want[0]} 项：{_want[1]} 项有对账、{_want[2]} 项写明理由」')
+
 if fails:
     for f in fails:
         print(f'::error::{f}')

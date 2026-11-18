@@ -43,7 +43,7 @@
 | `0w17/5` | C 警告审计（46 个带 main 的源文件用 -Wall -Wextra 重编一遍） | GITHUB-COMPLIANCE.md、VERIFICATION.md |
 | `0w18/5` | Python 脚本 lint（34 个脚本：E9 运行时错 + F pyflakes + B905 zip 显式 strict） | GITHUB-COMPLIANCE.md、VERIFICATION.md |
 | `0w19/5` | 社区文件结构（issue 表单写错时 GitHub 会静默忽略整份） | VERIFICATION.md |
-| `0w20/5` | HDR 钩子不变量（图层每帧记 / 两处 tick / 显式 headroom 让位 / 降级与回头路成对） | DESIGN.md、VERIFICATION.md |
+| `0w20/5` | HDR 钩子不变量（图层每帧记 / 两处 tick / 显式 headroom 让位 / 降级与回头路成对） | DESIGN.md、DEVICE-ONLY.md、VERIFICATION.md |
 | `0w21/5` | CI 结果判读（CI 绿了但 macOS 那步被跳过，也是绿：判据要认得出） | VERIFICATION.md |
 | `0w22/5` | 步骤索引（docs/STEPS.md 必须与 run_all.sh 的 step 行逐条一致） | VERIFICATION.md |
 | `0w3/5` | 文档计数（套数 / 断言总数 / 上屏 fragment 字节数 必须与实测一致） | VERIFICATION.md |

@@ -17,6 +17,7 @@
 | `host_adapt.m 的 s2a_hdr_out_plan（输出侧三格）`<br>src/host_adapt.m | 是 | `src/t_hdr_env.c` | 四格语义表；原先 S2A_HDR_OUTPUT=1 会让 FMT=1 永远拿不到 EDR，把唯一能判黑屏归因的实验判据自己废掉。 |
 | `nvn_mtl.m 的 hdr_head_tick（运行期 headroom）`<br>src/nvn_mtl.m | 是 | `src/t_hdr_head.c` | 每帧读 layer 的 maximumExtendedDynamicRangeColorComponent（Apple 文档所指，不是 potentialEDRHeadroom），死区 1%。 |
 | `16F 降级 / 回头路（fmt guard）`<br>src/nvn_mtl.m | 是 | `src/t_hdr_fmtguard.c` | 连续 60 帧拿不到 drawable 才降级、降级时像素格式+EDR+颜色空间三者一起改、600 帧后试探回来。 |
+| `s2a_out_layer_hdr（图层的 EDR 声明与颜色空间）`<br>src/host_adapt.m | 是 | **无** | 纯 UIKit/QuartzCore 属性赋值，没有可对账的算术：它做的事就是两个属性 + 一个颜色空间对象。本机能给它的保护是结构断言——`0w20/5` 的 H8 钉住「iOS 与 Mac 两个分支各调一次、且函数体里同时有 EDR 声明与扩展线性 sRGB」。这条与 §129 的 Metal 3 静默失效同一个病：漏设一侧时画面发灰或高光被裁，却没有一行日志。 |
 | `s2a_hdr_status_line（诊断行）`<br>src/nvn_hdr.h | 是 | `src/t_hdr_stat.c` | 固定格式逐字符可 diff；tools/hdr_ref.c --stat-line 调同一函数，任何一侧改了格式另一边立刻红。 |
 
 ## 表外的东西
