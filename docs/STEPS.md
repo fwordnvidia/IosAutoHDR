@@ -6,11 +6,11 @@
 | 步骤 | 标题 | 叙述在 |
 | --- | --- | --- |
 | `0/5` | 量化报告（docs/QUALITY.md 必须与实测一致） | VERIFICATION.md、README.md |
-| `0b/5` | 真实内容验证（docs/REAL-CONTENT.md 必须与实测一致） | （仅索引） |
-| `0c/5` | 时间行为（真实照片 60 帧序列，判缓慢运动不抖、纸白不动） | （仅索引） |
-| `0d/5` | 使用者命令 hdr_convert（值域 / 纸白不动 / 色域真生效 / 抖动只动最低位） | （仅索引） |
-| `0e/5` | 色相误差（docs/COLOR.md：Lab 缩放 vs 线性锚定） | （仅索引） |
-| `0f/5` | MSL 静态守卫（没有 Metal 编译器时挡已知雷区） | REVIEW.md |
+| `0b/5` | 真实内容验证（docs/REAL-CONTENT.md 必须与实测一致） | VERIFICATION.md |
+| `0c/5` | 时间行为（真实照片 60 帧序列，判缓慢运动不抖、纸白不动） | VERIFICATION.md |
+| `0d/5` | 使用者命令 hdr_convert（值域 / 纸白不动 / 色域真生效 / 抖动只动最低位） | VERIFICATION.md |
+| `0e/5` | 色相误差（docs/COLOR.md：Lab 缩放 vs 线性锚定） | VERIFICATION.md |
+| `0f/5` | MSL 静态守卫（没有 Metal 编译器时挡已知雷区） | REVIEW.md、VERIFICATION.md |
 | `0g/5` | 消融报告（四档策略对照） | VERIFICATION.md |
 | `0h/5` | 转场序列（300 帧：硬切 / 交叉淡入 / 淡到黑 / 黑场 / 淡入） | VERIFICATION.md、README.md |
 | `0i/5` | 每帧 CPU 开销（控制器一次调用的实测） | VERIFICATION.md、README.md |
@@ -23,13 +23,13 @@
 | `0k/5` | BT.2408 display-referred 放置方式（与 knee 并列的第二条路） | VERIFICATION.md |
 | `0j/5` | 对照图（真实照片：SDR vs 自动 HDR；--check 连图内容一起核） | VERIFICATION.md、README.md |
 | `0r/5` | 与方法 A 的定量对照（逆函数自检 + 逐码值表） | README.md |
-| `0s/5` | 整幅图像上屏/CPU 对账（3 张真实照片 × 3 档旋钮） | （仅索引） |
-| `0z/5` | 保真（真实照片：纸白以下必须逐位不动） | （仅索引） |
-| `0y/5` | review 地图（docs/REVIEW.md 必须与补丁文件清单/行数一致） | （仅索引） |
-| `0w2/5` | 可调项（docs/OPTIONS.md 必须与源码里的常数/注释一致） | （仅索引） |
-| `0w4/5` | 随机直方图不变量（t_hdr_fuzz：12 条性质 × 20 万次判定） | （仅索引） |
-| `0w5/5` | 白点/重心 与独立参考实现对账（t_hdr_oracle：4000 组随机直方图 + 真实照片） | （仅索引） |
-| `0w6/5` | 全关态逐位一致（t_hdr_identity：穷举 256 个码值 × 5 条路径） | （仅索引） |
+| `0s/5` | 整幅图像上屏/CPU 对账（3 张真实照片 × 3 档旋钮） | VERIFICATION.md |
+| `0z/5` | 保真（真实照片：纸白以下必须逐位不动） | VERIFICATION.md |
+| `0y/5` | review 地图（docs/REVIEW.md 必须与补丁文件清单/行数一致） | VERIFICATION.md |
+| `0w2/5` | 可调项（docs/OPTIONS.md 必须与源码里的常数/注释一致） | VERIFICATION.md |
+| `0w4/5` | 随机直方图不变量（t_hdr_fuzz：12 条性质 × 20 万次判定） | VERIFICATION.md |
+| `0w5/5` | 白点/重心 与独立参考实现对账（t_hdr_oracle：4000 组随机直方图 + 真实照片） | VERIFICATION.md |
+| `0w6/5` | 全关态逐位一致（t_hdr_identity：穷举 256 个码值 × 5 条路径） | VERIFICATION.md |
 | `0e7/5` | 内存与未定义行为（30 套 × ASan+UBSan，halt_on_error=1 / detect_leaks=1） | VERIFICATION.md |
 | `0w7/5` | 基线一致（patch/BASELINE 是唯一真相源，README/PR 必须与它对齐） | VERIFICATION.md |
 | `0w8/5` | README 与仓库一致（引用的路径存在、入口脚本都被写进 README） | VERIFICATION.md |
@@ -46,7 +46,7 @@
 | `0w20/5` | HDR 钩子不变量（图层每帧记 / 两处 tick / 显式 headroom 让位 / 降级与回头路成对） | DESIGN.md、VERIFICATION.md |
 | `0w21/5` | CI 结果判读（CI 绿了但 macOS 那步被跳过，也是绿：判据要认得出） | VERIFICATION.md |
 | `0w22/5` | 步骤索引（docs/STEPS.md 必须与 run_all.sh 的 step 行逐条一致） | VERIFICATION.md |
-| `0w3/5` | 文档计数（套数 / 断言总数 / 上屏 fragment 字节数 必须与实测一致） | （仅索引） |
+| `0w3/5` | 文档计数（套数 / 断言总数 / 上屏 fragment 字节数 必须与实测一致） | VERIFICATION.md |
 | `0x/5` | 设备日志判读（三格矩阵 T1/T2/T3 的判据） | FI-DOMAIN.md、REVIEW.md、VERIFICATION.md |
 | `0w/5` | 真实照片颜色保真（逐像素 CIELAB） | VERIFICATION.md、README.md |
 | `0v/5` | 图像级用例（夜景 / HUD / 字幕 / 淡出） | VERIFICATION.md |
