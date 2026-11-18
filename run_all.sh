@@ -199,6 +199,9 @@ python3 scripts/check_hdr_hooks.py || fail=1
 step "0w21/5 CI 结果判读（CI 绿了但 macOS 那步被跳过，也是绿：判据要认得出）"
 python3 scripts/check_ci_result.py --selftest || fail=1
 
+step "0w22/5 步骤索引（docs/STEPS.md 必须与 run_all.sh 的 step 行逐条一致）"
+python3 scripts/report_steps.py --check || fail=1
+
 step "0w3/5 文档计数（套数 / 断言总数 / 上屏 fragment 字节数 必须与实测一致）"
 python3 scripts/check_counts.py || fail=1
 
