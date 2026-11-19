@@ -23,13 +23,22 @@ cp "$ROOT"/testdata/*.ppm "$DST/testdata/" 2>/dev/null
 # 文档、补丁、工具
 cp "$ROOT"/docs/*.md "$DST/docs/" 2>/dev/null
 cp "$ROOT"/patch/hdr-auto-l1.patch "$ROOT"/patch/BASELINE "$ROOT"/patch/src.manifest "$DST/patch/" || exit 1
-cp "$ROOT"/tools/*.c "$DST/tools/" 2>/dev/null
+# tools/ 下不只有 .c：ref_check.sh 与 measure_banding.py 也是闸门的一部分。
+#   2026-11-19 之前这里只拷 *.c，投影里的 ref_check.sh 停在旧版（还在用 GNU 专属的 stat -c），
+#   macOS runner 上才现形。
+for f in "$ROOT"/tools/*.c "$ROOT"/tools/*.sh "$ROOT"/tools/*.py; do
+    [ -f "$f" ] && cp "$f" "$DST/tools/"
+done
 for f in "$ROOT"/scripts/*; do
+    [ -f "$f" ] || continue        # 跳过 __pycache__/ 之类目录（否则 cp 每次都报「略过目录」）
     case $(basename "$f") in
         publish.sh) continue ;;   # 含旧仓库地址，不进投影
         *) cp "$f" "$DST/scripts/" ;;
     esac
 done
+# src/Makefile 是上游整文件（graphics/nvn/Makefile，补丁只改 GENH 一行），按投影规矩不该在这里；
+#   早期同步留下的副本从未更新过，CI 上 check_patch_fresh 因此报「src 与树不一致」。删掉，改动只在补丁里。
+rm -f "$DST/src/Makefile"
 # 可执行位要单独搬：`cp` 写到**已存在**的目标文件时保留目标自己的权限位，
 #   于是开发树里 `chmod +x` 过的脚本，投影里仍是 644 —— 照 README 敲 `./scripts/x.py`
 #   得到「权限不够」。2026-11-18 投影自检第 11 组（clone 后跑 run_all）才发现。

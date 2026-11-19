@@ -10,6 +10,7 @@
     python3 scripts/report_curveref.py            # 写 docs/CURVE-REF.md
     python3 scripts/report_curveref.py --check    # 只校验，不一致 rc=1
 """
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -35,7 +36,24 @@ def run_tool(target):
         c, lin, ours, bt, stops = line.split(",")
         rows[int(c)] = (float(lin), float(ours), float(bt), float(stops))
     err_line = [l for l in out.stderr.splitlines() if "逆函数自检" in l]
-    return rows, worst, (err_line[0].lstrip("# ").strip() if err_line else "（无自检输出）")
+    return rows, worst, selfcheck_text(err_line[0] if err_line else "")
+
+
+def selfcheck_text(line):
+    """逆函数自检只写「过没过」，不写误差原值。
+
+    原值是 libm 的最后一位（Linux glibc 8.882e-16、macOS 6.661e-16），把它写进受 `--check`
+    保护的文档，等于让文档绑死在某一个平台上 —— 2026-11-19 第一次在 macOS runner 上跑
+    run_all 就因此红了。判据本身（< 1e-9）不变，超了照样报失败。
+    """
+    m = re.search(r"最大还原误差 ([0-9.eE+-]+)", line)
+    if not m:
+        return "（无自检输出）"
+    err = float(m.group(1))
+    if not err < 1e-9:
+        raise SystemExit("✗ 逆函数自检失败：最大还原误差 %.3e ≥ 1e-9" % err)
+    return "逆函数自检：最大还原误差 < 1e-12（判据 < 1e-9；原值随 libm 末位浮动，不写进文档）" \
+        if err < 1e-12 else "逆函数自检：最大还原误差 < 1e-9（通过）"
 
 
 def build():

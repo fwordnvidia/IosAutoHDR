@@ -49,7 +49,7 @@ jobs:
         run: |
           set -e
           [ -f run_all.sh ] || cd hdr-auto        # 仓库根可能是 ios-build（含 hdr-auto/），也可能是包本身
-          python3 -c 'import yaml, PIL' 2>/dev/null || python3 -m pip install -q pyyaml pillow
+          python3 -c 'import yaml, PIL, numpy' 2>/dev/null || python3 -m pip install -q pyyaml pillow numpy
           python3 -c 'import hashlib; print("· patch sha256", hashlib.sha256(open("patch/hdr-auto-l1.patch","rb").read()).hexdigest())'
           mkdir -p build
           cc -O2 -I src tools/hdr_ref.c -lm -o build/hdr_ref

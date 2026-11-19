@@ -39,7 +39,7 @@ else bad "有 $n 个非社区 yml/yaml，预期 0 或 1"; fi
 
 say "2) 不含上游整文件（只交付补丁与自写代码）"
 before=$fail
-for f in nvn_mtl.m host_adapt.m nvn_present_fi.inc galaxy_ng.m; do
+for f in nvn_mtl.m host_adapt.m nvn_present_fi.inc galaxy_ng.m Makefile; do
     hit=$(find . -path ./.git -prune -o -name "$f" -print 2>/dev/null | head -1)
     [ -z "$hit" ] || bad "发现上游整文件 $hit"
 done

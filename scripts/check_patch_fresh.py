@@ -30,6 +30,9 @@ HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(HERE, "scripts"))
 
 
+UPSTREAM_WHOLE = ("nvn_mtl.m", "nvn_present_fi.inc", "host_adapt.m", "Makefile")
+
+
 def map_path(name):
     """与 scripts/make_patch.sh 的 map_path() 逐条对应（改一处就要改另一处）。"""
     if name == "hdr_hist.metal":
@@ -74,6 +77,18 @@ def main():
     src_dir = os.path.join(HERE, "src")
     src_names = sorted(os.listdir(src_dir))
     src_names = [n for n in src_names if os.path.isfile(os.path.join(src_dir, n))]
+
+    # 投影形态：公开仓库按设计不带上游整文件（nvn_mtl.m 1.9 MB 等，见 check_callsites.py 同款说明），
+    # 这几个文件的改动只以 diff 形式存在于补丁里。2026-11-19 第一次在 macOS runner 上跑投影的
+    # run_all 才暴露：这里把它们报成「补丁里有、src 里没有来源」，而投影里根本不该有来源。
+    # 只豁免这几个名字；自写文件在投影里照样逐字节核。
+    projection = not os.path.exists(os.path.join(src_dir, "nvn_mtl.m"))
+    upstream_whole = {map_path(n) for n in UPSTREAM_WHOLE}
+    if projection:
+        src_names = [n for n in src_names if n not in UPSTREAM_WHOLE]
+        files = [f for f in files if f not in upstream_whole]
+        print("· 投影形态（无 src/nvn_mtl.m）：上游整文件 %s 只核补丁、不核来源"
+              % "/".join(sorted(UPSTREAM_WHOLE)))
 
     stale, missing, extra = [], [], []
     for name in src_names:

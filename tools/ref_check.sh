@@ -2,7 +2,7 @@
 # 参考 CLI 的自检：不需要 S2Arm、不需要 Metal、不需要 Xcode。
 # 断言的是「行为」，不是「数值快照」——所以换编译器、换平台都应该过。
 set -u
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 CC=${CC:-cc}
 BIN=build/hdr_ref
 mkdir -p build
@@ -65,7 +65,7 @@ for y in range(h):
 open('/tmp/ref_in.ppm','wb').write(b'P6\n%d %d\n255\n'%(w,h)+b''.join(rows))
 PY
 "$BIN" -i /tmp/ref_in.ppm -o /tmp/ref_out1.ppm --stats >/dev/null && "$BIN" -i /tmp/ref_in.ppm -o /tmp/ref_out2.ppm --stats >/dev/null
-cmp -s /tmp/ref_out1.ppm /tmp/ref_out2.ppm && ok "两次转换输出逐字节相同（$(stat -c%s /tmp/ref_out1.ppm) B）" || bad "PPM 输出不稳定"
+cmp -s /tmp/ref_out1.ppm /tmp/ref_out2.ppm && ok "两次转换输出逐字节相同（$(wc -c < /tmp/ref_out1.ppm | tr -d ' ') B）" || bad "PPM 输出不稳定"
 python3 - <<'PY'
 d=open('/tmp/ref_out1.ppm','rb').read()
 assert d.startswith(b'P6'), '头不对'
@@ -83,7 +83,7 @@ rows=[float(l.split(',')[1]) for l in sys.argv[1].strip().splitlines()[1:]]
 sys.exit(0 if all(b>=a-1e-6 for a,b in zip(rows,rows[1:])) else 1)
 PY2
 python3 scripts/plot_curves.py /tmp/curve_check.svg "$BIN" >/dev/null && [ -s /tmp/curve_check.svg ] \
-  && ok "plot_curves.py 能出图（$(stat -c%s /tmp/curve_check.svg) B）" || bad "plot_curves.py 失败"
+  && ok "plot_curves.py 能出图（$(wc -c < /tmp/curve_check.svg | tr -d ' ') B）" || bad "plot_curves.py 失败"
 
 echo "=== 场景八：真实渐变上的带（平台阶）与抖动效果"
 python3 - <<'PY2'
