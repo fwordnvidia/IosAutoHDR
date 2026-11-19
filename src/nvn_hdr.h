@@ -29,13 +29,26 @@ typedef struct {
 //   所以 head 不能只在起局时从环境变量取一次：宿主每帧读一次当前上界，变化超过死区就写这里，
 //   上屏 buffer 与 CPU 侧 ITM 从此读同一个值（否则两侧会各按各的 head 扩张）。
 //   0 表示「没有覆盖」，回落到 S2A_HDR_HEADROOM / 缺省 2.0。
-static float s2a_hdr_head_live;
+// 原子 32 位浮点读写：供 head 与 g_hdr_knee[2] 在上屏线程、补帧队列与 Metal 完成回调之间无竞争共享。
+static inline void s2a_hdr_f32_store(unsigned int *slot, float v) {
+    unsigned int bits = 0u;
+    memcpy(&bits, &v, sizeof bits);
+    __atomic_store_n(slot, bits, __ATOMIC_RELEASE);
+}
+static inline float s2a_hdr_f32_load(const unsigned int *slot) {
+    unsigned int bits = __atomic_load_n(slot, __ATOMIC_ACQUIRE);
+    float v = 0.0f;
+    memcpy(&v, &bits, sizeof v);
+    return v;
+}
+
+static unsigned int s2a_hdr_head_live_bits;
 static inline void s2a_hdr_head_set(float h) {
     if (!(h >= 1.0f)) h = 1.0f;
     if (h > 4.0f) h = 4.0f;
-    s2a_hdr_head_live = h;
+    s2a_hdr_f32_store(&s2a_hdr_head_live_bits, h);
 }
-static inline void s2a_hdr_head_clear(void) { s2a_hdr_head_live = 0.0f; }
+static inline void s2a_hdr_head_clear(void) { s2a_hdr_f32_store(&s2a_hdr_head_live_bits, 0.0f); }
 
 // 变化死区：相对差小于 S2A_HDR_HEAD_DEADBAND 就不动（读数抖一下不该让画面闪）。
 #define S2A_HDR_HEAD_DEADBAND 0.01f
@@ -127,7 +140,8 @@ static inline s2a_hdr_itm s2a_hdr_itm_params(void) {
     // 注意不能改缓存里的 p：运行期覆盖一旦写进缓存，覆盖撤销后就再也回不到基线
     //   （实测：2.0 → 覆盖 3.0 → 覆盖 1.0 → 撤销，缓存里留着 1.0）。所以按值返回副本。
     s2a_hdr_itm r = p;
-    if (s2a_hdr_head_live > 0.0f) r.head = s2a_hdr_head_live;   // 运行期覆盖优先
+    float live = s2a_hdr_f32_load(&s2a_hdr_head_live_bits);
+    if (live > 0.0f) r.head = live;   // 运行期覆盖优先
     return r;
 }
 

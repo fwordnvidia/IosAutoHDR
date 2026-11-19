@@ -122,16 +122,16 @@ L_out = head * L^1.15        # head 缺省 2.03，即 BT.2408 的 203/100
 - 原文要点（逐句核对过）：EDR 画布下 **`1.0` 对应 SDR 的最大亮度**，不等于面板峰值；
   面板更亮时「additional range (headroom) may be available」——100 nit 的 UI 亮度 + 400 nit 面板
   ⇒ 值可以到 `4.0`；同一块面板把 UI 亮度调到 200 nit ⇒ `1.0` 是 200 nit、`2.0` 是 400 nit。
-  **「The actual upper bound … may vary from moment to moment」**，要读当前的
-  `maximumExtendedDynamicRangeColorComponent`；超过上界的值由系统钳位；
+  **「The actual upper bound … may vary from moment to moment」**，要读当前的屏幕 EDR headroom
+  （iOS：`UIScreen.currentEDRHeadroom`；macOS：`NSScreen.maximumExtendedDynamicRangeColorComponentValue`）；超过上界的值由系统钳位；
   用户调亮时「expect midtones to increase and highlights to be compressed」。
 - 对应实现：
   - 已经有的：`host_adapt.m` 读 `potentialEDRHeadroom`，`>= 1.0` 才建 16F 画布（`S2A_HDR_HEADROOM`）；
-    运行期上界改用 layer 的 `maximumExtendedDynamicRangeColorComponent`（Apple 文档指定，逐帧、可随时变化），
-    `currentEDRHeadroom` 只记日志（防正反馈）。
+    运行期上界逐帧读取屏幕当前 EDR headroom（iOS `UIScreen.currentEDRHeadroom` / macOS
+    `NSScreen.maximumExtendedDynamicRangeColorComponentValue`，经 KVC 与 `respondsToSelector:` 守卫，
+    未声明 `wantsExtendedDynamicRangeContent` 时锁 1.0）。
   - **本轮补上的**：起局时读一次是不够的。`nvn_mtl.m` 新增 `hdr_head_tick()`，在 Metal 3 的
-    `present_blit` 与 Metal 4 的 `present_blit_m4` 两个入口每帧读一次
-    `maximumExtendedDynamicRangeColorComponent`，变化超过 **1% 死区**才更新
+    `present_blit` 与 Metal 4 的 `present_blit_m4` 两个入口每帧读一次屏幕 EDR 上界，变化超过 **1% 死区**才更新
     `s2a_hdr_head_live`（`nvn_hdr.h`），上屏 buffer 的 `knee.z` 与 CPU 侧 `s2a_hdr_itm_params()`
     读同一个值。否则用户在游戏里拖亮度、或把窗口拖到另一块屏，画面会一直按旧 head 扩张
     （过亮或欠亮）。

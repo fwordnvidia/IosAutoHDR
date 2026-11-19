@@ -17,7 +17,11 @@ import shutil
 import subprocess
 import sys
 
-from PIL import Image, ImageChops, ImageStat
+try:
+    from PIL import Image, ImageChops, ImageStat
+    HAVE_PIL = True
+except ImportError:
+    HAVE_PIL = False
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 IMG = os.path.join(ROOT, "docs", "img")
@@ -265,7 +269,13 @@ def main():
                 print("✗ %s 的指纹与 GALLERY.md 不一致（重跑不带 --check）" % path)
                 return 1
         print("✓ docs/GALLERY.md 与 %d 张图一致" % len(manifest))
+        if not HAVE_PIL:
+            print("· 未装 Pillow，跳过像素内容复算（18 张图 sha256 已校验）")
+            return 0
         return verify_images(old)
+    if not HAVE_PIL:
+        print("✗ 生成对照图需要 Pillow（pip install pillow）")
+        return 1
     with open(OUT, "w", encoding="utf-8") as f:
         f.write(text)
     print("✓ 写入 docs/GALLERY.md（%d 张图）" % len(manifest))

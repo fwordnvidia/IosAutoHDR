@@ -35,8 +35,13 @@ if ! ( cd "$TMP/a" && git apply --whitespace=nowarn "$PATCH" ); then
     echo "::error::git apply 失败（这条路径是 4/5 用的，先看 verify.sh）"
     exit 1
 fi
-if ! ( cd "$TMP/b" && patch -p1 --forward --no-backup-if-mismatch <"$PATCH" >"$TMP/b.log" 2>&1 ); then
-    echo "::error::GNU patch -p1 失败 —— README 说「用 patch 也行」就不成立"
+if patch --version 2>&1 | grep -qi 'gnu'; then
+    PATCH_OK=$(cd "$TMP/b" && patch -p1 --forward --no-backup-if-mismatch <"$PATCH" >"$TMP/b.log" 2>&1 && echo 1 || echo 0)
+else
+    PATCH_OK=$(cd "$TMP/b" && patch -p1 -N <"$PATCH" >"$TMP/b.log" 2>&1 && echo 1 || echo 0)
+fi
+if [ "$PATCH_OK" != "1" ]; then
+    echo "::error::patch -p1 失败 —— README 说「用 patch 也行」就不成立"
     grep -iE 'fail|reject|fuzz' "$TMP/b.log" | head -5
     exit 1
 fi

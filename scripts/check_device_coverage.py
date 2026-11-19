@@ -50,7 +50,7 @@ DEVICE = [
     ("host_adapt.m 的 s2a_hdr_out_plan（输出侧三格）", "src/host_adapt.m", True, "src/t_hdr_env.c",
      "四格语义表；原先 S2A_HDR_OUTPUT=1 会让 FMT=1 永远拿不到 EDR，把唯一能判黑屏归因的实验判据自己废掉。"),
     ("nvn_mtl.m 的 hdr_head_tick（运行期 headroom）", "src/nvn_mtl.m", True, "src/t_hdr_head.c",
-     "每帧读 layer 的 maximumExtendedDynamicRangeColorComponent（Apple 文档所指，不是 potentialEDRHeadroom），死区 1%。"),
+     "每帧读屏幕 EDR 上界（iOS：UIScreen.currentEDRHeadroom；macOS：NSScreen.maximumExtendedDynamicRangeColorComponentValue），死区 1%；未声明 EDR（T1）时锁 1.0。"),
     ("16F 降级 / 回头路（fmt guard）", "src/nvn_mtl.m", True, "src/t_hdr_fmtguard.c",
      "连续 60 帧拿不到 drawable 才降级、降级时像素格式+EDR+颜色空间三者一起改、600 帧后试探回来。"),
     ("s2a_out_layer_hdr（图层的 EDR 声明与颜色空间）", "src/host_adapt.m", True, None,
@@ -92,7 +92,7 @@ def dispatch_evidence(symbol):
     if symbol.startswith("nvn_present_fi.inc"):
         return "fi_pass" in read("src/nvn_present_fi.inc")
     if symbol.startswith("host_adapt.m"):
-        return "s2a_hdr_out_plan" in read("graphics/nvn/host_adapt.m") or True
+        return "s2a_hdr_out_plan" in read("src/host_adapt.m")
     if symbol.startswith("nvn_mtl.m 的 hdr_head_tick"):
         return "hdr_head_tick" in read("src/nvn_mtl.m")
     if symbol.startswith("16F 降级"):

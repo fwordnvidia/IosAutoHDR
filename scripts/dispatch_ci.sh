@@ -88,6 +88,20 @@ echo "=== 1) 同步（带 CI）==="
 SYNC_CI=1 "$HERE/scripts/sync_release.sh" "$PROJ" || die "同步失败"
 
 echo "=== 2) 提交并推送 ==="
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/s2a-ci.XXXXXX") || die "建临时目录失败"
+trap 'rm -rf "$WORK"' EXIT
+# 用私有临时 ASKPASS 传凭据，不把 token 拼进 `git -c` 命令行（避免 ps 暴露与元字符注入）
+ASKPASS="$WORK/askpass.sh"
+TOKEN_FILE="$WORK/token"
+(umask 077 && printf '%s' "$TOKEN" > "$TOKEN_FILE")
+cat <<'EOF' > "$ASKPASS"
+#!/bin/sh
+case "$1" in
+    *Username*) printf '%s\n' "${S2A_GH_USER:-fwordnvidia}" ;;
+    *) cat "$S2A_GH_TOKEN_FILE" ;;
+esac
+EOF
+chmod 700 "$ASKPASS"
 cd "$PROJ" || die "进不去 $PROJ"
 if [ -n "$(git status --porcelain)" ]; then
     git add -A
@@ -97,11 +111,14 @@ if [ -n "$(git status --porcelain)" ]; then
 else
     say "投影无改动，直接推"
 fi
+HEAD_SHA=$(git rev-parse HEAD)
 if [ -n "$PROXY" ]; then
-    git -c http.proxy="$PROXY" -c "credential.helper=!f() { echo username=fwordnvidia; echo password=$TOKEN; }; f" \
+    GIT_TERMINAL_PROMPT=0 GIT_ASKPASS="$ASKPASS" S2A_GH_USER="${REPO%%/*}" S2A_GH_TOKEN_FILE="$TOKEN_FILE" \
+        git -c http.proxy="$PROXY" -c credential.helper= \
         push origin "HEAD:$REF" || die "推送失败（workflow 文件被拒 = token 缺 Workflows: Read and write）"
 else
-    git -c "credential.helper=!f() { echo username=fwordnvidia; echo password=$TOKEN; }; f" \
+    GIT_TERMINAL_PROMPT=0 GIT_ASKPASS="$ASKPASS" S2A_GH_USER="${REPO%%/*}" S2A_GH_TOKEN_FILE="$TOKEN_FILE" \
+        git -c credential.helper= \
         push origin "HEAD:$REF" || die "推送失败"
 fi
 say "推送完成：$(git rev-parse --short HEAD)"
@@ -109,59 +126,60 @@ say "推送完成：$(git rev-parse --short HEAD)"
 echo "=== 3) 触发 ==="
 BODY='{"ref":"'"$REF"'","inputs":{"reason":"dispatch_ci.sh：真编译 MSL 与 ObjC 语法"}}'
 if [ -n "$PROXY" ]; then
-    CODE=$(curl -sS -m 30 -o /tmp/dispatch_resp.json -w '%{http_code}' -x "$PROXY" \
+    CODE=$(curl -sS -m 30 -o "$WORK/dispatch_resp.json" -w '%{http_code}' -x "$PROXY" \
         -X POST -H "Authorization: token $TOKEN" -H "Accept: application/vnd.github+json" \
         "https://api.github.com/repos/$REPO/actions/workflows/verify.yml/dispatches" -d "$BODY")
 else
-    CODE=$(curl -sS -m 30 -o /tmp/dispatch_resp.json -w '%{http_code}' \
+    CODE=$(curl -sS -m 30 -o "$WORK/dispatch_resp.json" -w '%{http_code}' \
         -X POST -H "Authorization: token $TOKEN" -H "Accept: application/vnd.github+json" \
         "https://api.github.com/repos/$REPO/actions/workflows/verify.yml/dispatches" -d "$BODY")
 fi
-[ "$CODE" = "204" ] || die "dispatch 返回 $CODE（403 = token 缺 Workflows: Read and write；看 /tmp/dispatch_resp.json）"
+[ "$CODE" = "204" ] || die "dispatch 返回 $CODE（403 = token 缺 Workflows: Read and write；响应：$(head -c 200 "$WORK/dispatch_resp.json")）"
 say "已触发（204）"
 
 echo "=== 4) 等待运行 ==="
 RUN=""
 i=0
-while [ "$i" -lt 40 ]; do
+while [ "$i" -lt 20 ]; do
     i=$((i + 1))
-    RUN=$(api "/repos/$REPO/actions/runs?event=workflow_dispatch&per_page=1" \
-        | python3 -c 'import json,sys; d=json.load(sys.stdin); r=(d.get("workflow_runs") or [{}])[0]; print(r.get("id",""))' 2>/dev/null)
+    RUN=$(api "/repos/$REPO/actions/runs?event=workflow_dispatch&per_page=5" \
+        | python3 -c 'import json,sys; sha=sys.argv[1]; d=json.load(sys.stdin); hits=[r for r in (d.get("workflow_runs") or []) if r.get("head_sha")==sha]; print(hits[0].get("id","") if hits else "")' "$HEAD_SHA" 2>/dev/null)
     [ -n "$RUN" ] && break
     sleep 5
 done
-[ -n "$RUN" ] || die "40 次轮询都没看到 workflow_dispatch 运行（文件真在 main 上吗？）"
+[ -n "$RUN" ] || die "20 次轮询都没看到 head_sha=$HEAD_SHA 的 workflow_dispatch 运行（文件真在 $REF 上吗？）"
 say "run id：$RUN"
 
+POLL=${S2A_CI_POLL:-90}
 waited=0
 while [ "$waited" -lt "$TIMEOUT" ]; do
     ST=$(api "/repos/$REPO/actions/runs/$RUN" \
         | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("status",""), d.get("conclusion",""))')
     case $ST in
         "completed "*) say "运行结束：$ST"; break ;;
-        *) say "…运行中（已等 ${waited}s）"; sleep 20; waited=$((waited + 20)) ;;
+        *) say "…运行中（已等 ${waited}s）"; sleep "$POLL"; waited=$((waited + POLL)) ;;
     esac
 done
 [ "$waited" -lt "$TIMEOUT" ] || die "等了 ${TIMEOUT}s 还没结束；去 Actions 页看，或用 run id $RUN 手工取日志"
 
 echo "=== 5) 取日志与结论 ==="
-api "/repos/$REPO/actions/runs/$RUN" > /tmp/ci_run.json || die "取 run 失败"
-api "/repos/$REPO/actions/runs/$RUN/jobs" > /tmp/ci_jobs.json || die "取 jobs 失败"
-python3 - <<'PY' || die "拼 run.json 失败"
-import json
-run = json.load(open('/tmp/ci_run.json'))
-jobs = json.load(open('/tmp/ci_jobs.json'))
+api "/repos/$REPO/actions/runs/$RUN" > "$WORK/ci_run.json" || die "取 run 失败"
+api "/repos/$REPO/actions/runs/$RUN/jobs" > "$WORK/ci_jobs.json" || die "取 jobs 失败"
+python3 - "$WORK/ci_run.json" "$WORK/ci_jobs.json" "$WORK/ci_run_full.json" <<'PY' || die "拼 run.json 失败"
+import json, sys
+run = json.load(open(sys.argv[1]))
+jobs = json.load(open(sys.argv[2]))
 run['jobs'] = jobs.get('jobs') or []
-json.dump(run, open('/tmp/ci_run_full.json', 'w'))
+json.dump(run, open(sys.argv[3], 'w'))
 PY
 # 日志走 gh（它知道怎么拉 zip 并展开）：没有 gh 就退化成提示
 if command -v gh >/dev/null 2>&1; then
-    GH_HOST=github.com HTTPS_PROXY=${PROXY:-} gh run view "$RUN" -R "$REPO" --log > /tmp/ci.log 2>/dev/null \
+    GH_HOST=github.com HTTPS_PROXY=${PROXY:-} gh run view "$RUN" -R "$REPO" --log > "$WORK/ci.log" 2>/dev/null \
         || say "gh 取日志失败（可能没登录）；日志文件为空会让判读报 R3/R4"
 else
-    say "没有 gh：请手工把日志存成 /tmp/ci.log（判读会被 R3/R4 判红）"
-    : > /tmp/ci.log
+    say "没有 gh：请手工把日志存成 ci.log（判读会被 R3/R4 判红）"
+    : > "$WORK/ci.log"
 fi
 
 echo "=== 6) 判读 ==="
-python3 "$HERE/scripts/check_ci_result.py" --run-file /tmp/ci_run_full.json --log-file /tmp/ci.log
+python3 "$HERE/scripts/check_ci_result.py" --run-file "$WORK/ci_run_full.json" --log-file "$WORK/ci.log"

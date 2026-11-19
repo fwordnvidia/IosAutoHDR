@@ -73,7 +73,7 @@ kernel void hdr_hist_knee(device atomic_uint *hist [[buffer(0)]],
 //      avg  = Σ(bin_center·count)/Σcount，bin_center 取格中心（不是上沿）
 //      white= 从亮往暗扫，第一个 count ≥ 0.5%·total 且不在黑场以下的格子的**上沿**
 //      hi   = clamp(white/0.8, 0.01, 2.0)   ← L1 的两个界都比 L0 宽/低，别用 0.25/1.0
-//      scene= smoothstep(0.5, 1.6, |avg - prev_avg|)
+//      scene= smoothstep(0.40, 1.10, |avg - prev_avg|)   ← 真值在下面常量区；写 0.5/1.6 是过期注释（t_hdr_gpu_l1 对账时发现）
 //    out[0] = float4(hi, white, avg, valid)
 // ---------------------------------------------------------------------------
 constant float kBlackCut   = -6.0f;

@@ -176,6 +176,40 @@ int main(void) {
               "冻结期间 knee_lo 三档都不动");
     }
 
+    // ── 9. 回归：亮场硬切进永久暗场（avg < -4.5），稳态下必须解冻而非永久卡在亮场高拐点 ──
+    {
+        memset(&s, 0, sizeof s);
+        make_frame(h, 1.0f);
+        for (int i = 0; i < 6; i++) step(&s, h, hz);
+        float bright_lo = s.lo;
+        make_frame(h, 0.05f);   // 永久暗场（avg < -4.5）
+        for (int i = 0; i < 60; i++) step(&s, h, hz);
+        CHECK(s.lo < bright_lo * 0.5f && s.lo < 0.15f,
+              "亮场硬切进永久暗场：稳态下必须解冻并落回暗场拐点（不能被 dark_hold 永久冻死）");
+    }
+
+    // ── 10. 回归：暗区期间 prev_lo > 0.10 时硬切回亮场，必须一帧到位（不被 dark_hold 拦截）──
+    {
+        memset(&s, 0, sizeof s);
+        make_frame(h, 1.0f);
+        for (int i = 0; i < 6; i++) step(&s, h, hz);
+        // 渐进淡出到暗区（avg < -4.5），此时 s.lo 仍保持在 ~0.86 > 0.10
+        for (int i = 1; i <= 35; i++) {
+            float k = powf(0.02f, (float)i / 35.0f);
+            make_frame(h, k);
+            step(&s, h, hz);
+        }
+        // 硬切到一个新的中等亮度场景（白点 ~0.35，!dim && dim_prev）
+        uint32_t hb[S2A_HDR_HIST_BINS];
+        memset(hb, 0, sizeof hb);
+        for (int i = 0; i < 5; i++) hb[s2a_hdr_hist_bin(0.08f + 0.04f * (float)i)] = 15000;
+        hb[s2a_hdr_hist_bin(0.35f)] = 20000;
+        s2a_hdr_auto_l1b x; memset(&x, 0, sizeof x);
+        int ok2 = s2a_hdr_auto_l1b_step_fused_hz(hb, 0.0f, s.lo, s.hi, s.avg, s.white, s.have, hz, &x);
+        CHECK(ok2 == 1 && x.frozen == 0 && x.scene >= 0.99f && fabsf(x.knee_lo - 0.35f) < 0.06f,
+              "暗区 prev_lo>0.10 时硬切回亮场：不得被 dark_hold 拦截，应一帧到位到新纸白");
+    }
+
     printf("%s t_hdr_fade：淡出/黑场/淡入/硬切/星空 %d 项 → %s\n",
            fails ? "✗" : "✓", checks, fails ? "有失败" : "全过");
     return fails ? 1 : 0;

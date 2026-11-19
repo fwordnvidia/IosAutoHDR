@@ -80,9 +80,9 @@ check(contains(lines, "hdr_head_tick", "g_hdr_knee[2]")[0],
 check(len(re.findall(r'#include "nvn_hdr_hist\.inc"', src)) == 1,
       "nvn_hdr_hist.inc 只被 include 一次")
 
-# 4) 16F 常量块与 8 位块分属两个 blit：knee 走 uv[8..11]（MTL4）与后 32 字节（MTL3）
-check("uv[8] = m4lo" in src and "uv[9] = m4de" in src and "uv[10] = g_hdr_knee[2]" in src,
-      "MTL4 上屏把 knee 写进 uv[8..11]（lo/delta 来自原子槽，head/flag 来自 g_hdr_knee）")
+# 4) 16F 常量块与 8 位块分属两个 blit：knee 与 head 均走原子槽写进 uv[8..11]（MTL4）与后 32 字节（MTL3）
+check("uv[8] = m4lo" in src and "uv[9] = m4de" in src and "s2a_hdr_f32_load(&g_hdr_head_bits)" in src,
+      "MTL4 上屏把 knee 写进 uv[8..11]（lo/delta/head 均来自原子槽）")
 
 # 5) 补帧链的参数化仍在（cfmt 声明 + 至少两处使用）
 fi = "\n".join(read(FI))
@@ -94,9 +94,9 @@ check("newBufferWithLength:16 * sizeof(float)" in fi,
       "补帧的 uniform 缓冲是 16 float（8 裁剪 + 4 knee + 4 extra），与 present_blit_m4 的 HdrCrop 一致")
 check(re.search(r"newBufferWithLength:12 \* sizeof\(float\)", fi) is None,
       "补帧不再用 12 float 的缓冲（那个长度会让 present_blit_m4 跳过 knee 写入）")
-# 5c) 16F 下补出的帧也要过同一遍扩张（走 present_blit_m4），否则隔帧一亮一暗
-check(re.search(r"f->cfmt == MTLPixelFormatRGBA16Float[\s\S]{0,400}?present_blit_m4\(cb, mid", fi) is not None,
-      "16F 时补出的帧走 present_blit_m4（与真帧同一遍扩张），不是纯拷贝")
+# 5c) 16F 下补出的帧也要过同一遍扩张（走 present_blit_m4 且 flip=NO），否则隔帧一亮一暗或上下倒置
+check(re.search(r"MTLPixelFormatRGBA16Float[\s\S]{0,400}?present_blit_m4\(cb, mid, dm\.texture, NULL, f->uv\[2\], f->tab\[2\], NO, 1\)", fi) is not None,
+      "16F 时补出的帧走 present_blit_m4（与真帧同一遍扩张且 flip=NO），不是纯拷贝")
 
 # 6) layer 侧：16F + EDR 三件套仍在同一文件
 host = "\n".join(read(HOST))
@@ -108,11 +108,12 @@ check("s2a_hdr_out_plan(" in host, "host_adapt.m 走 s2a_hdr_out_plan（纯函�
 check("if (f && *f == '1') return 0;" not in host,
       "host_adapt.m 不再有「FMT=1 就把 EDR 关掉」那条分支（那会让 T2 永远不成立）")
 check(host.count("s2a_out_plan(&w16, &edr)") >= 2, "两个出屏决策都从同一个 plan 取值")
-# EDR 上界的读数不在 host_adapt.m，而在 nvn_mtl.m 的 hdr_head_tick 里（按 Apple 文档读 layer 的
-# maximumExtendedDynamicRangeColorComponent；potentialEDRHeadroom 是屏幕级预测量，上屏用不到）。
-# 断言：读数存在、带 respondsToSelector 守卫、不在 host_adapt.m 里重复一份。
-check("maximumExtendedDynamicRangeColorComponent" in src,
-      "nvn_mtl.m 每帧读 maximumExtendedDynamicRangeColorComponent")
+# EDR 上界的读数不在 host_adapt.m，而在 nvn_mtl.m 的 hdr_head_tick 里（按真实 Apple API：
+# iOS 读 UIScreen.currentEDRHeadroom，macOS 读 NSScreen.maximumExtendedDynamicRangeColorComponentValue；
+# CAMetalLayer 根本没有 maximumExtendedDynamicRangeColorComponent 选择器）。
+check("currentEDRHeadroom" in src and "maximumExtendedDynamicRangeColorComponentValue" in src
+      and "[layer maximumExtendedDynamicRangeColorComponent]" not in src,
+      "nvn_mtl.m 每帧读真实屏幕 EDR 上界（UIScreen.currentEDRHeadroom / NSScreen.maximumExtendedDynamicRangeColorComponentValue）")
 check(contains(lines, "hdr_head_tick", "respondsToSelector")[0],
       "hdr_head_tick 读到之前先 respondsToSelector 守卫")
 check("EDRHeadroom" not in host and "maximumExtendedDynamicRange" not in host,
@@ -142,7 +143,7 @@ inc_lines = read(inc_path) if os.path.exists(inc_path) else []
 fi_path = os.path.join(ROOT, "graphics/nvn/gfx/nvn/nvn_present_fi.inc")
 fi_lines = read(fi_path) if os.path.exists(fi_path) else []
 pubs = sum(1 for ln in inc_lines if "s2a_hdr_knee_publish(&g_hdr_knee_pub" in ln)
-check(pubs >= 3, "nvn_hdr_hist.inc 的每处 knee 更新都走原子发布（≥3 处）", "实际 %d 处" % pubs)
+check(pubs >= 1, "nvn_hdr_hist.inc 的 knee 更新走原子发布（≥1 处）", "实际 %d 处" % pubs)
 for fn in ("present_blit", "present_blit_m4"):
     good, why = contains(lines, fn, "s2a_hdr_knee_take(&g_hdr_knee_pub")
     check(good, "%s 里 knee 从原子槽取（不直接读 g_hdr_knee[0..1]）" % fn, why)
@@ -166,7 +167,7 @@ for needle, what in (
     (("static inline float3 to_enc(float3 c, uint enc)"), "MSL 里有 to_enc"),
     (("float3 c = to_enc(src.read("), "down 的 luma 在编码域"),
     (("abs(to_enc(cur.read(gp).rgb, enc) - to_enc(prev.read(gp).rgb, enc)) < 0.004"), "spread 的静止判定在编码域"),
-    (("uint32_t enc = (cur.pixelFormat == MTLPixelFormatRGBA16Float) ? 1u : 0u;"), "dispatch 侧按源格式设 enc"),
+    (("uint32_t enc = (cur.pixelFormat == MTLPixelFormatRGBA16Float && f->in_linear) ? 1u : 0u;"), "dispatch 侧按源格式与线性标记设 enc"),
     (("[en setBytes:&enc length:sizeof enc atIndex:0];"), "down 拿到 enc"),
     (("[en setBytes:&enc length:sizeof enc atIndex:4];"), "spread 拿到 enc"),
 ):

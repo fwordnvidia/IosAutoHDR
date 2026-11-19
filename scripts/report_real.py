@@ -29,9 +29,21 @@ FALLBACK = "/usr/share/backgrounds/*.jpg"
 
 
 def prep():
+    os.makedirs(WORK, exist_ok=True)
+    # 优先使用随包发布的 testdata/p_*.ppm 或 build/real/p_*.ppm（不依赖 Linux /usr/share/backgrounds 或 ImageMagick）
+    bundled = []
+    for p in SOURCES:
+        name = os.path.splitext(os.path.basename(p))[0]
+        dst = os.path.join(WORK, "p_%s.ppm" % name)
+        src_td = os.path.join(HERE, "testdata", "p_%s.ppm" % name)
+        if not os.path.exists(dst) and os.path.exists(src_td):
+            shutil.copyfile(src_td, dst)
+        if os.path.exists(dst):
+            bundled.append((name, dst))
+    if len(bundled) == len(SOURCES):
+        return bundled
     if not shutil.which("convert"):
         return []
-    os.makedirs(WORK, exist_ok=True)
     paths = [p for p in SOURCES if os.path.exists(p)]
     if not paths:
         paths = sorted(glob.glob(FALLBACK))[:3]

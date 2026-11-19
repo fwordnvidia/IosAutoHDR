@@ -22,6 +22,15 @@ if ! printf 'int main(void){return 0;}' > "$OUT/probe.c" || \
     exit 0
 fi
 
+# 探测 LeakSanitizer 支持（macOS arm64 的 Apple Clang 不支持 detect_leaks=1，但不影响 ASan+UBSan）
+if ASAN_OPTIONS=detect_leaks=1:abort_on_error=1 "$OUT/probe" >/dev/null 2>&1; then
+    ASAN_OPTS="detect_leaks=1:abort_on_error=1"
+    LSAN_NOTE="detect_leaks=1"
+else
+    ASAN_OPTS="abort_on_error=1"
+    LSAN_NOTE="detect_leaks=unsupported"
+fi
+
 fail=0; n=0; t0=$(date +%s)
 for f in src/t_hdr*.c; do
     b=$(basename "$f" .c); n=$((n+1))
@@ -29,7 +38,7 @@ for f in src/t_hdr*.c; do
             -I src "$f" -lm -o "$OUT/$b" 2>"$OUT/$b.cc.log"; then
         printf '  ✗ %-24s 编译失败\n' "$b"; head -3 "$OUT/$b.cc.log"; fail=$((fail+1)); continue
     fi
-    if ! ( cd "$ROOT" && ASAN_OPTIONS=detect_leaks=1:abort_on_error=1 \
+    if ! ( cd "$ROOT" && ASAN_OPTIONS="$ASAN_OPTS" \
              UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
              "$OUT/$b" >"$OUT/$b.out" 2>&1 ); then
         printf '  ✗ %-24s 运行失败\n' "$b"
@@ -42,6 +51,6 @@ for f in src/t_hdr*.c; do
         grep -E 'runtime error|Sanitizer' "$OUT/$b.out" | head -3; fail=$((fail+1))
     fi
 done
-printf '· %d 套 × ASan+UBSan（halt_on_error=1, detect_leaks=1），%ds\n' "$n" "$(( $(date +%s)-t0 ))"
+printf '· %d 套 × ASan+UBSan（halt_on_error=1, %s），%ds\n' "$n" "$LSAN_NOTE" "$(( $(date +%s)-t0 ))"
 [ "$fail" -eq 0 ] || { echo "✗ $fail 套有问题，日志在 $OUT/"; exit 1; }
 echo "✓ 无内存错误、无未定义行为、无泄漏（$n 套）"

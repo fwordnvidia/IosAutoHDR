@@ -1,32 +1,34 @@
-// 自动 HDR 的 GPU 侧：每 N 帧扫一遍画面亮度分布，算 99.5 分位 → 改 g_hdr_knee。
-//   算法与 nvn_hdr_auto.h（CPU 参考，t_hdr_auto 29 项守着）同一组常数；
+// 自动 HDR 的 GPU 侧：每 N 帧扫一遍画面亮度分布，blit 1 KB 回 CPU → L1b → 原子发布到 g_hdr_knee_pub。
+//   算法与 nvn_hdr_auto.h / nvn_hdr_auto_l1.h（CPU 参考实现）完全一致；
 //   kernel 在 graphics/nvn/shaders/hdr_hist.metal，Makefile 嵌成 k_hdr_hist。
 // 开关 S2A_HDR_AUTO=1（缺省 0）：关着时 present 用 s2a_hdr_itm_params() 的固定 knee，与之前逐字节一致。
 #include "nvn_hdr_hist_msl.h"
 #include "nvn_hdr_auto.h"      // L0 常数（HIST_BINS / KNEE_RATIO / HIST_EVERY）
-#include "nvn_hdr_auto_l1.h"
-#include <time.h>   // clock_gettime：帧率估计（Darwin 上同样是 CLOCK_MONOTONIC）   // L1：白点 / 黑场 / 场景平滑（s2a_hdr_auto_step_l1）
+#include "nvn_hdr_auto_l1.h"   // L1：白点 / 黑场 / 场景平滑 / HUD 剔除
+#include <pthread.h>
+#include <time.h>              // clock_gettime：帧率估计（Darwin 上同样是 CLOCK_MONOTONIC）
 
 @interface NvHdrHist : NSObject {
 @public
     id<MTLBuffer> hist;                          // 256 × uint32，GPU 私有
-    id<MTLBuffer> out;                           // float4(hi, white, avg, scene)，shared，CPU 可读
-    id<MTLBuffer> histcpu[2];                    // 256 × uint32 的 CPU 副本（blit 拷回），shared；双槽防跨帧竞争
+    id<MTLBuffer> histcpu[2];                    // 256 × uint32 的 CPU 副本（blit 拷回），shared；双槽 + 占槽标记防跨帧竞争
+    int           slot_busy[2];                  // 1 = 该槽有在途 blit/回调，尚未读完（g_hh_mu 下）
     unsigned      hs;                            // 双槽轮转
-    id<MTLComputePipelineState> ps_clear, ps_add, ps_l1;
+    id<MTLComputePipelineState> ps_clear, ps_add;
     NSUInteger w, h;
     float prev_avg;                              // 上一帧的 log2 重心（场景判据用）
     float prev_white;                            // 上一帧的白点（第二个场景判据：重心不动也认）
     int have_prev;
-    double last_t;                               // 上一帧的时间戳（秒）：帧率估计用
-    float hz;                                    // 估计出的帧率（平滑过），喂给 coef
-    uint64_t frame;                              // 已跳过多少帧
-    uint64_t logf;                               // 诊断行节拍（S2A_HDR_LOG）
+    double last_t;                               // 上一次直方图回调的时间戳（秒）：帧率估计用
+    float hz;                                    // 估计出的游戏帧率（平滑过，单位 fps）
+    uint64_t frame;                              // 已看到的帧数
+    uint64_t logf;                               // 诊断行节拍（单位 = tick；每 8 帧一个 tick）
     unsigned gen;                                // 每次重建 +1：回调里用它判断「这份数据是否还属于当前对象」
 }
 @end
 @implementation NvHdrHist @end
 
+static pthread_mutex_t g_hh_mu = PTHREAD_MUTEX_INITIALIZER;
 static NvHdrHist *g_hh;
 static unsigned g_hh_gen;   // 单调递增：重建对象时换一代，旧命令缓冲的回调据此作废
 
@@ -38,7 +40,7 @@ static int hdr_log_setting(void) {
 
 static int hdr_auto_setting(void) {
     static int v = -1;
-    if (v < 0) { const char *e = getenv("S2A_HDR_AUTO"); v = !(e == NULL || *e == '0'); }
+    if (v < 0) { v = s2a_hdr_enabled(getenv("S2A_HDR_AUTO")); }
     return v;
 }
 
@@ -51,11 +53,10 @@ static id<MTLComputePipelineState> hh_pipeline(id<MTLLibrary> lib, NSString *nam
     return ps;
 }
 
-static NvHdrHist *hdr_hist_prepare(NSUInteger w, NSUInteger h) {
-    if (g_hh && g_hh->w == w && g_hh->h == h && g_hh->ps_l1) return g_hh;
+static NvHdrHist *hdr_hist_prepare_locked(NSUInteger w, NSUInteger h) {
+    if (g_hh && g_hh->w == w && g_hh->h == h && g_hh->ps_clear && g_hh->ps_add) return g_hh;
     if (g_hh) {
         if (g_hh->hist) res_remove(g_hh->hist);
-        if (g_hh->out) res_remove(g_hh->out);
         if (g_hh->histcpu[0]) res_remove(g_hh->histcpu[0]);
         if (g_hh->histcpu[1]) res_remove(g_hh->histcpu[1]);
         g_hh = nil;
@@ -67,16 +68,14 @@ static NvHdrHist *hdr_hist_prepare(NSUInteger w, NSUInteger h) {
     NvHdrHist *f = [NvHdrHist new];
     f->ps_clear = hh_pipeline(lib, @"hdr_hist_clear");
     f->ps_add = hh_pipeline(lib, @"hdr_hist_add");
-    f->ps_l1 = hh_pipeline(lib, @"hdr_hist_l1");
-    if (!f->ps_clear || !f->ps_add || !f->ps_l1) return nil;
+    if (!f->ps_clear || !f->ps_add) return nil;
     f->hist = [g_dev newBufferWithLength:256 * sizeof(uint32_t) options:MTLResourceStorageModePrivate];
-    f->out = [g_dev newBufferWithLength:sizeof(float) * 4 options:MTLResourceStorageModeShared];
     // 直方图本体留在 GPU 私有内存（原子加最快），每 S2A_HDR_HIST_EVERY 帧用 blit 拷 1 KB 回 CPU：
-    //   有了真直方图，上屏判据就和 t_hdr_* 测的是同一份代码，不再需要「白点 < 2%」这种代理。
+    //   有了真直方图，上屏判据就和 t_hdr_* 测的是同一份代码，不再需要任何 GPU 侧代理。
     for (int i = 0; i < 2; i++)
         f->histcpu[i] = [g_dev newBufferWithLength:256 * sizeof(uint32_t) options:MTLResourceStorageModeShared];
-    if (!f->hist || !f->out || !f->histcpu[0] || !f->histcpu[1]) { MLOG("【红】自动 HDR：建不了 buffer"); return nil; }
-    res_add(f->hist); res_add(f->out); res_add(f->histcpu[0]); res_add(f->histcpu[1]);
+    if (!f->hist || !f->histcpu[0] || !f->histcpu[1]) { MLOG("【红】自动 HDR：建不了 buffer"); return nil; }
+    res_add(f->hist); res_add(f->histcpu[0]); res_add(f->histcpu[1]);
     f->w = w; f->h = h;
     f->gen = ++g_hh_gen;
     g_hh = f;
@@ -84,130 +83,160 @@ static NvHdrHist *hdr_hist_prepare(NSUInteger w, NSUInteger h) {
     return f;
 }
 
-// 每 S2A_HDR_HIST_EVERY 帧跑一次：clear → add（4×4 采样）→ hdr_hist_l1，结果回读 16 B 进 g_hdr_knee
-static void hdr_hist_tick(id<MTLCommandBuffer> cb, id<MTLTexture> src) {
-    if (!hdr_auto_setting() || !src) return;
-    NvHdrHist *f = hdr_hist_prepare(src.width, src.height);
-    if (!f) return;
-    if ((f->frame++ % S2A_HDR_HIST_EVERY) != 0) return;
+// 内部实现：把 clear → add（4×4/8×8 采样）→ blit 1 KB 编进指定的 classic MTLCommandBuffer，
+// 完成回调在 CPU 侧按真直方图算 L1b 并原子发布到 g_hdr_knee_pub。
+// 返回 1 = 已编进 cb（调用方若自建了 cb 须提交）；0 = 本帧跳过。
+static int hdr_hist_encode_cb(id<MTLCommandBuffer> cb, id<MTLTexture> src, NvHdrHist *f, unsigned slot) {
     @autoreleasepool {
-        id<MTLComputeCommandEncoder> en = [cb computeCommandEncoder];
-        if (!en) return;
-        // 双槽：本帧 blit 进 slot，下一个 tick（S2A_HDR_HIST_EVERY 帧后）进另一个槽，
-        //   CPU 读完前不会被覆盖；落后超过两个 tick 时只会读到较新的数据，不会读到半写状态。
-        unsigned slot = (f->hs++) & 1u;
         id<MTLBuffer> hb = f->histcpu[slot];
-        if (!hb) return;
+        if (!hb || !cb) {
+            pthread_mutex_lock(&g_hh_mu); f->slot_busy[slot] = 0; pthread_mutex_unlock(&g_hh_mu);
+            return 0;
+        }
+        id<MTLComputeCommandEncoder> en = [cb computeCommandEncoder];
+        if (!en) {
+            pthread_mutex_lock(&g_hh_mu); f->slot_busy[slot] = 0; pthread_mutex_unlock(&g_hh_mu);
+            return 0;
+        }
         uint32_t stride = (src.width >= 2560 || src.height >= 1440) ? 8u : 4u;
         uint32_t linearize = (src.pixelFormat == MTLPixelFormatRGBA16Float) ? 0u : 1u;
+        // 必须传 present_raw_src(src) 剥掉 _sRGB 视图：
+        //   Metal 规范下 texture2d::read() 对 _sRGB 纹理会自动解码 sRGB→线性；
+        //   若直接传原 src 且 linearize=1，hdr_hist_add 会再做一次 s2a_lin_h()，导致二次伽马解码（整体压暗 ~2.5 stop）。
+        id<MTLTexture> raw_src = present_raw_src(src);
         [en setComputePipelineState:f->ps_clear];
         [en setBuffer:f->hist offset:0 atIndex:0];
         [en dispatchThreads:MTLSizeMake(256, 1, 1) threadsPerThreadgroup:MTLSizeMake(64, 1, 1)];
         [en setComputePipelineState:f->ps_add];
-        [en setTexture:src atIndex:0];   // read() 不解码 sRGB，直接读存储原字节，不用转 view
+        [en setTexture:raw_src atIndex:0];
         [en setBuffer:f->hist offset:0 atIndex:0];
         [en setBytes:&stride length:sizeof stride atIndex:1];
         [en setBytes:&linearize length:sizeof linearize atIndex:2];
         [en dispatchThreads:MTLSizeMake(src.width, src.height, 1) threadsPerThreadgroup:MTLSizeMake(8, 8, 1)];
-        // hdr_hist_l1 不 dispatch。它算出来的 f->out 没有任何读者——knee 全部在 CPU 侧按下面
-        // 回读的真直方图算（s2a_hdr_auto_l1b_step_fused_hz），GPU 只负责数格子。
-        // 曾经它每 S2A_HDR_HIST_EVERY（8）帧被 dispatch 一次、写进一个没人看的 buffer：白算。
-        // 管线 ps_l1 仍然建着，因为 src/t_hdr_gpu_l1.c 拿它当参考实现对账；将来真要在 GPU 上
-        // 算 knee，把这段 dispatch 连同读取 f->out 一起加回来——那时对账里「GPU 白点比 CPU bulk
-        // 高 1 stop 以上」那条断言会先红，提醒 HUD 簇剔除也得补上。
+        // hdr_hist_l1 不 dispatch：knee 全部在 CPU 侧按回读的真直方图算（s2a_hdr_auto_l1b_step_fused_hz），
+        // GPU 只负责数格子。曾因移除 dispatch 却保留了读 f->out 的 `if (!(v[0] > 0)) return;`，导致回调每帧早退失效。
         [en endEncoding];
-        // 把 1 KB 直方图拷回 CPU 可见缓冲：判定全部在 CPU 侧按「真直方图」算，
-        // GPU 只负责数格子。blit 在 30 帧里发生一次，开销可忽略。
+
         id<MTLBlitCommandEncoder> be = [cb blitCommandEncoder];
-        if (be) {
-            [be copyFromBuffer:f->hist sourceOffset:0
-                      toBuffer:hb destinationOffset:0
-                          size:256 * sizeof(uint32_t)];
-            [be endEncoding];
+        if (!be) {
+            pthread_mutex_lock(&g_hh_mu); f->slot_busy[slot] = 0; pthread_mutex_unlock(&g_hh_mu);
+            return 0;
         }
-        NvHdrHist *owner = f; unsigned gen = f->gen;
-        [cb addCompletedHandler:^(id<MTLCommandBuffer> b) {
-            // 以「对象 + 代号」双重判定：分辨率改变会释放并重建 buffer，此时旧命令缓冲的回调
-            //   既不该读新对象的 prev_*，也不该把旧直方图的结论写进 g_hdr_knee。
-            if (b.error || !g_hh || g_hh != owner || owner->gen != gen || !owner->out) return;
-            float v[4]; memcpy(v, g_hh->out.contents, sizeof v);   // (hi, white, avg, scene)：GPU 版本的结果，留作对账
-            if (!(v[0] > 0.0f)) return;                            // 空帧 / 全黑：保持上一帧
-            NvHdrHist *h = g_hh;
-            const uint32_t *hist = (const uint32_t *)hb.contents;
-            float cur_lo = g_hdr_knee[0];
-            float cur_hi = g_hdr_knee[0] + g_hdr_knee[1];
-            s2a_hdr_auto_l1b b;
-            // 真直方图路径：与 t_hdr_* 完全同一份判定（纸白、暗场、HUD 视角都能精确判）
-            // 有直方图就不必再靠代理：HUD 孤立高光剔除（sdr_white_bulk）也能在 CPU 侧先做，
-            // 于是上屏路径与 t_hdr_* 走的是同一份「纸白 / 暗场 / HUD」判定。
-            float wov = 0.0f, wbulk = 0.0f;
-            if (s2a_hdr_sdr_white_bulk(hist, &wbulk)) wov = wbulk;
-            // 帧率：从两次回调的时间差估（拿不到层刷新率）。掉帧/切档时 coef 跟着变，
-            // 否则 30 Hz 下每秒只走一半、120 Hz 下四倍，观感就是「切档后过渡速度变了」。
-            struct timespec ts;
-            double now = 0.0;
-            if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0) now = (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
-            if (now > 0.0) {
-                h->hz = s2a_hdr_hz_from_dt(now - h->last_t, h->hz);
-                h->last_t = now;
-            }
-            float hz = (h->hz > 0.0f) ? h->hz : S2A_HDR_SMOOTH_HZ;
-            if (s2a_hdr_auto_l1b_step_fused_hz(hist, wov, cur_lo, cur_hi, h->prev_avg, h->prev_white,
-                                               h->have_prev, hz, &b)) {
-                // 先发原子槽（渲染线程只认它），再更新 CPU 侧记账，两处值一致
-                s2a_hdr_knee_publish(&g_hdr_knee_pub, b.knee_lo, b.knee_hi - b.knee_lo);
-                g_hdr_knee[0] = b.knee_lo;
-                g_hdr_knee[1] = b.knee_hi - b.knee_lo;
-                g_hdr_knee[3] = 1.0f;
-                // 一次对账日志：GPU 的 float4 与 CPU 直方图算出的白点/重心应一致（差 >0.02 就是两边分叉了）
-                if (!h->have_prev ||
-                    fabsf(b.white - v[1]) > 0.02f || fabsf(b.avg - v[2]) > 0.05f) {
-                    MLOG("自动 HDR：GPU/CPU 对账 white %.4f/%.4f avg %.4f/%.4f（差大就是 kernel 与头文件分叉）",
-                         (double)v[1], (double)b.white, (double)v[2], (double)b.avg);
-                }
-                if (hdr_log_setting() && (h->logf++ % S2A_HDR_LOG_EVERY) == 0) {
-                    s2a_hdr_stat st;
-                    memset(&st, 0, sizeof st);
-                    st.fmt16 = 1;              // 能跑到这里说明 HDR 链路在跑（画布是 16F 且开了 S2A_HDR_AUTO）
-                    st.itm = 1;
-                    st.frozen = b.frozen;
-                    st.head = g_hdr_knee[2];
-                    st.knee_lo = b.knee_lo; st.knee_hi = b.knee_hi;
-                    st.white = b.white; st.avg = b.avg; st.scene = b.scene;
-                    st.map = s2a_hdr_map();   // 0 = 拐点（缺省），1 = BT.2408 内容映射（此时 knee 只是日志）
-                    char line[192];
-                    s2a_hdr_status_line(line, sizeof line, &st);
-                    MLOG("%s", line);
-                }
-                h->prev_avg = b.avg; h->prev_white = b.white; h->have_prev = 1;
+        [be copyFromBuffer:f->hist sourceOffset:0
+                  toBuffer:hb destinationOffset:0
+                      size:256 * sizeof(uint32_t)];
+        [be endEncoding];
+
+        NvHdrHist *owner = f;
+        unsigned gen = f->gen;
+        [cb addCompletedHandler:^(id<MTLCommandBuffer> done_cb) {
+            // 持 g_hh_mu 保护 g_hh / prev_* / slot_busy，避免分辨率重建时 ARC 跨线程并发释放导致 UAF。
+            // 回调参数命名为 done_cb（旧代码叫 b，与局部 s2a_hdr_auto_l1b b 重定义导致编译失败）。
+            pthread_mutex_lock(&g_hh_mu);
+            owner->slot_busy[slot] = 0;
+            if (done_cb.error || !g_hh || g_hh != owner || owner->gen != gen) {
+                pthread_mutex_unlock(&g_hh_mu);
                 return;
             }
-            // 直方图读不出来（blit 没跑 / 缓冲被回收）：退回旧的 float4 代理路径
-            float scene = h->have_prev
-                        ? s2a_hdr_scene_fuse(v[3], s2a_hdr_scene_weight_white(h->prev_white, v[1]))
-                        : 0.0f;
-            float tgt_lo = 0.0f, tgt_hi = 0.0f;
-            if (s2a_hdr_l1b_targets_from_white(v[1], &tgt_lo, &tgt_hi)) {
-                float lo = (g_hdr_knee[3] != 0.0f) ? s2a_hdr_auto_step_l1b_hz(cur_lo, tgt_lo, scene, hz) : tgt_lo;
-                float hi = (g_hdr_knee[3] != 0.0f) ? s2a_hdr_auto_step_l1b_hz(cur_hi, tgt_hi, scene, hz) : tgt_hi;
-                if (!(hi > lo + 1e-4f)) hi = lo + 1e-4f;
-                if (fabsf(lo - cur_lo) > 1e-6f || fabsf(hi - cur_hi) > 1e-6f || g_hdr_knee[3] == 0.0f) {
-                    s2a_hdr_knee_publish(&g_hdr_knee_pub, lo, hi - lo);
-                    g_hdr_knee[0] = lo;
-                    g_hdr_knee[1] = hi - lo;
-                    g_hdr_knee[3] = 1.0f;
+            NvHdrHist *h = g_hh;
+            uint32_t hist_copy[S2A_HDR_HIST_BINS];
+            memcpy(hist_copy, hb.contents, sizeof hist_copy);
+
+            float cur_lo = g_hdr_knee[0];
+            float cur_hi = g_hdr_knee[0] + g_hdr_knee[1];
+            float wov = 0.0f, wbulk = 0.0f;
+            if (s2a_hdr_sdr_white_bulk(hist_copy, &wbulk)) wov = wbulk;
+
+            // 帧率与节拍换算：两次回调间隔 S2A_HDR_HIST_EVERY（8）帧。
+            //   直接把 8 帧 dt 喂给 s2a_hdr_hz_from_dt 会把 30/60/120 fps（tick 率 3.75/7.5/15 Hz）全部钳死在 24 Hz；
+            //   先除以 S2A_HDR_HIST_EVERY 得到真实游戏帧率 fps，再折算成 tick_hz = fps / S2A_HDR_HIST_EVERY
+            //   传给控制器，使平滑时间常数与 fade_rate（stop/秒）都按真实墙钟秒数对齐。
+            struct timespec ts;
+            double now = 0.0;
+            if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0)
+                now = (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
+            if (now > 0.0) {
+                if (h->last_t > 0.0) {
+                    double frame_dt = (now - h->last_t) / (double)S2A_HDR_HIST_EVERY;
+                    h->hz = s2a_hdr_hz_from_dt(frame_dt, h->hz);
                 }
-            } else {
-                float nxt_hi = (g_hdr_knee[3] != 0.0f) ? s2a_hdr_auto_step_l1(cur_hi, v[0], scene) : v[0];
-                if (fabsf(nxt_hi - cur_hi) > 1e-6f || g_hdr_knee[3] == 0.0f) {
-                    float lo = S2A_HDR_KNEE_RATIO * nxt_hi;
-                    s2a_hdr_knee_publish(&g_hdr_knee_pub, lo, nxt_hi - lo);
-                    g_hdr_knee[0] = lo;
-                    g_hdr_knee[1] = nxt_hi - lo;
-                    g_hdr_knee[3] = 1.0f;
-                }
+                h->last_t = now;
             }
-            h->prev_avg = v[2]; h->prev_white = v[1]; h->have_prev = 1;
+            float fps = (h->hz > 0.0f) ? h->hz : S2A_HDR_SMOOTH_HZ;
+            float tick_hz = fps / (float)S2A_HDR_HIST_EVERY;
+
+            s2a_hdr_auto_l1b res;
+            memset(&res, 0, sizeof res);
+            int ok = s2a_hdr_auto_l1b_step_fused_hz(hist_copy, wov, cur_lo, cur_hi,
+                                                    h->prev_avg, h->prev_white,
+                                                    h->have_prev, tick_hz, &res);
+            int do_log = 0;
+            s2a_hdr_stat st;
+            if (ok) {
+                s2a_hdr_knee_publish(&g_hdr_knee_pub, res.knee_lo, res.knee_hi - res.knee_lo);
+                g_hdr_knee[0] = res.knee_lo;
+                g_hdr_knee[1] = res.knee_hi - res.knee_lo;
+                g_hdr_knee[3] = 1.0f;
+                const uint64_t log_ticks = (uint64_t)((S2A_HDR_LOG_EVERY + S2A_HDR_HIST_EVERY - 1) / S2A_HDR_HIST_EVERY);
+                if (hdr_log_setting() && (h->logf++ % log_ticks) == 0) {
+                    memset(&st, 0, sizeof st);
+                    st.fmt16 = 1;
+                    st.itm = 1;
+                    st.frozen = res.frozen;
+                    st.head = s2a_hdr_f32_load(&g_hdr_head_bits);
+                    st.knee_lo = res.knee_lo; st.knee_hi = res.knee_hi;
+                    st.white = res.white; st.avg = res.avg; st.scene = res.scene;
+                    st.map = s2a_hdr_map();
+                    do_log = 1;
+                }
+                h->prev_avg = res.avg; h->prev_white = res.white; h->have_prev = 1;
+            }
+            pthread_mutex_unlock(&g_hh_mu);
+            if (do_log) {
+                char line[192];
+                s2a_hdr_status_line(line, sizeof line, &st);
+                MLOG("%s", line);
+            }
         }];
+        return 1;
+    }
+}
+
+// 公共节拍与占槽入口（Metal 3 / Metal 4 共用）：返回 1 表示本帧应当采样并已占下 *slot_out
+static int hdr_hist_claim(id<MTLTexture> src, NvHdrHist **out_f, unsigned *slot_out) {
+    if (!hdr_auto_setting() || !src) return 0;
+    pthread_mutex_lock(&g_hh_mu);
+    NvHdrHist *f = hdr_hist_prepare_locked(src.width, src.height);
+    if (!f) { pthread_mutex_unlock(&g_hh_mu); return 0; }
+    if ((f->frame++ % S2A_HDR_HIST_EVERY) != 0) { pthread_mutex_unlock(&g_hh_mu); return 0; }
+    unsigned slot = (f->hs++) & 1u;
+    if (f->slot_busy[slot]) {
+        // 上一次同槽回调尚未读完：宁可跳过一次采样，也不覆写正在读取的 CPU 缓冲
+        pthread_mutex_unlock(&g_hh_mu);
+        return 0;
+    }
+    f->slot_busy[slot] = 1;
+    *out_f = f;
+    *slot_out = slot;
+    pthread_mutex_unlock(&g_hh_mu);
+    return 1;
+}
+
+// Metal 3 上屏路径：复用本帧 present 的 MTLCommandBuffer
+static void hdr_hist_tick(id<MTLCommandBuffer> cb, id<MTLTexture> src) {
+    NvHdrHist *f = nil; unsigned slot = 0;
+    if (!hdr_hist_claim(src, &f, &slot)) return;
+    (void)hdr_hist_encode_cb(cb, src, f, slot);
+}
+
+// Metal 4 上屏路径：在辅助经典队列（q_cb）上异步跑直方图（7/8 帧零开销，每 8 帧一次），
+// 避免 Metal 4 设备（!g_m3）开启 S2A_HDR_AUTO=1 时完全不采样。
+static void hdr_hist_tick_m4(id<MTLTexture> src) {
+    NvHdrHist *f = nil; unsigned slot = 0;
+    if (!hdr_hist_claim(src, &f, &slot)) return;
+    id<MTLCommandBuffer> qcb = q_cb();
+    if (!hdr_hist_encode_cb(qcb, src, f, slot)) return;
+    if (!cb_put(qcb)) {
+        pthread_mutex_lock(&g_hh_mu); f->slot_busy[slot] = 0; pthread_mutex_unlock(&g_hh_mu);
     }
 }

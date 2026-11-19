@@ -9,6 +9,7 @@
 #include <stdint.h>
 #include <string.h>
 #include "nvn_hdr_auto.h"
+#include "nvn_hdr_auto_l1.h"
 
 static int fails, checks;
 #define CHECK(cond, ...) do { checks++; if (!(cond)) { fails++; printf("  ✗ "); printf(__VA_ARGS__); printf("\n"); } } while (0)
@@ -119,6 +120,21 @@ int main(void) {
         for (int i = 1; i < 4; i++) if (gens[i] <= gens[i - 1]) mono = 0;
         CHECK(mono, "重建 4 次的代号必须严格递增");
         OK("代号序列：1,2,3,4（重建 4 次）严格递增");
+    }
+
+    // 6) 节拍帧率折算：每 S2A_HDR_HIST_EVERY（8）帧回调一次，必须把 dt 除以 8 再估 fps，
+    //    否则 30/60/120 fps 的 tick 率（3.75/7.5/15 Hz）会被 S2A_HDR_HZ_MIN 全部钳死在 24 Hz。
+    {
+        const float targets[3] = {30.0f, 60.0f, 120.0f};
+        int hz_ok = 1;
+        for (int k = 0; k < 3; k++) {
+            float est = 0.0f;
+            double tick_dt = (double)S2A_HDR_HIST_EVERY / (double)targets[k];
+            for (int i = 0; i < 20; i++) est = s2a_hdr_hz_from_dt(tick_dt / (double)S2A_HDR_HIST_EVERY, est);
+            if (fabsf(est - targets[k]) > 0.5f) hz_ok = 0;
+        }
+        CHECK(hz_ok, "每 %d 帧 tick 折算单帧 dt：30/60/120 fps 必须准确还原而非被钳死在 24 Hz", S2A_HDR_HIST_EVERY);
+        OK("节拍帧率折算：30/60/120 fps 经 dt/%d 准确还原", S2A_HDR_HIST_EVERY);
     }
 
     printf("%s t_hdr_tick：回读控制流 %d 项（失败 %d）\n", fails ? "✗" : "✓", checks, fails);

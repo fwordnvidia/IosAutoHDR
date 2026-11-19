@@ -73,6 +73,12 @@ def extract():
                 with open(os.path.join(TMP, "fi_msl_%d.metal" % i), "w", encoding="utf-8") as f:
                     f.write(body)
 
+    hist = os.path.join(HERE, "src", "hdr_hist.metal")
+    if os.path.exists(hist):
+        with open(hist, encoding="utf-8", errors="replace") as rf:
+            with open(os.path.join(TMP, "hdr_hist.metal"), "w", encoding="utf-8") as wf:
+                wf.write(rf.read())
+
     return sorted(f for f in os.listdir(TMP) if f.endswith(".metal"))
 
 
@@ -162,8 +168,9 @@ def main():
                       "%s：%s 的 attribute 序号同类不重复（%s）"
                       % (name, header.strip().split("\n")[-1].strip()[:32] or "?", dup or "ok"))
 
-    print("✓ MSL 静态守卫：%d 个文件 %d 项%s"
-          % (len(files), checks, "全过" if fails == 0 else "，失败 %d" % fails))
+    mark = "✓" if fails == 0 else "✗"
+    print("%s MSL 静态守卫：%d 个文件 %d 项%s"
+          % (mark, len(files), checks, "全过" if fails == 0 else "，失败 %d" % fails))
     return 0 if fails == 0 else 1
 
 

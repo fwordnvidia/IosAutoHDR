@@ -185,7 +185,8 @@ print(f'· 定义 {total_defs} 个、调用点 {total_calls} 个')
 # 所以 mirror 那条断言随之删除——**不是**漏了，是载体没了（见 docs/DESIGN.md「镜像 / 反射层」）。
 # 数对了还不够——必须确实是 screen=1（画进画布）那条分支，否则画幅/中间图会错。
 SPOT = [
-    ('src/nvn_present_fi.inc', 'present_blit_m4(cb, mid, dm.texture, NULL, f->uv[2], f->tab[2], flip, 1)', 1),
+    ('src/nvn_present_fi.inc', 'present_blit_m4(cb, mid, dm.texture, NULL, f->uv[2], f->tab[2], NO, 1)', 1),
+    ('src/nvn_present_fi.inc', 'present_blit_m4(cb, src, dm.texture, crop, f->uv[2], f->tab[2], flip, 1)', 1),
     ('src/nvn_present_fi.inc', 'present_blit_m4(cb, src, dr.texture, crop, f->uv[3], f->tab[3], flip, 1)', 1),
     ('src/nvn_mtl.m', 'present_blit(cb, src, dst, crop, flip, 1)', 1),
     ('src/nvn_mtl.m', 'present_blit(cb, src, s->input, crop, flip, 0)', 1),

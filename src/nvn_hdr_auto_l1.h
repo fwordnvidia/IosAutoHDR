@@ -475,12 +475,10 @@ static inline int s2a_hdr_auto_l1b_step_fused_hz(const uint32_t hist[S2A_HDR_HIS
         // 稳态黑底（星空：不动）不冻结，仍然按暗场落地 0.02 扩张——那是刻意的行为，有单测守着。
         const int deep_dark = avg < S2A_HDR_DIM_APL && s2a_hdr_lit_frac(hist) < S2A_HDR_DARK_FRAC;
         const int dark_passage = deep_dark && fade_rate > S2A_HDR_FADE_MIN_S;
-        // 已经黑到测不出纸白、但上一帧的 knee 明显不是暗场落地值 ⇒ 这是「淡到黑/过场黑」，
-        // 保持着色前的 knee 不动。稳态星空从 0 起、prev_lo 一直是 0.02，不受这条影响。
-        // 这条覆盖整个「暗区进出」过程（含淡到黑后快速回亮的那几帧——那时一帧就能升 2 stop，
-        // 任何速度判据都会把它看成切镜）。
-        const int dim_any = dim || dim_prev;
-        const int dark_hold = dim_any && prev_lo > 5.0f * S2A_HDR_DARK_FLOOR;
+        // 暗区里**亮度还在明显变化**且上一帧拐点高于暗场落地值 ⇒ 淡到黑/黑区快速回亮期间保持原拐点不动；
+        // 不再用无条件的 dim || dim_prev：那样①亮场硬切进永久暗场（洞穴/星空）后在稳态下也会永久冻死，
+        // ②离开暗区（!dim && dim_prev）时会抢先冻结，把下面的快速切镜分支变成死代码。
+        const int dark_hold = dim && (fade_rate > S2A_HDR_FADE_MIN_S) && prev_lo > 5.0f * S2A_HDR_DARK_FLOOR;
         if (uniform_fade || uniform_rise || goes_black || dark_passage || dark_hold) {
             // 淡出中：冻结（不要跟着掉下去把中调抬亮）
             out->white = prev_white; out->avg = avg; out->first = 0;

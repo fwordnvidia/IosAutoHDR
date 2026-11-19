@@ -99,6 +99,9 @@ def main():
 
     sources = [p for p in SOURCES if os.path.exists(p)]
     if not sources or not have_ffmpeg():
+        if check:
+            print("· 本机缺源图或 ffmpeg，跳过 docs/TEMPORAL.md 对账")
+            return 0
         lines += ["_本机没有源图或 ffmpeg，本表跳过。_", ""]
         text = "\n".join(lines)
         return finish(text, check)

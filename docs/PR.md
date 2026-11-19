@@ -7,7 +7,7 @@
 > `s2a_cpatch_present_aspect()` 自适应画幅等，共 256 行），重放后反向摘除逐字节还原为上游原文。
 >
 > 合入目标应是默认分支：已实测它能**干净地打到 `main`（`0db515053e07`）**，并在那棵树上跑通
-> 31 套单测 906 项 + 落点自检 56 项 + MSL/常数核对。上游仍在自己前进（同日实测通过的还有
+> 31 套单测 912 项 + 落点自检 56 项 + MSL/常数核对。上游仍在自己前进（同日实测通过的还有
 > `6d01b7897c0d`、`8874b92d071f`、`2237da8ca323`、`3f549467b00d`、`e77fca7b949b`、`b9bd76a202ab`、
 > `1c31fdc0`、`ddfef415`、`2b5aca92`）。上游代码里 HDR/EDR 意图标记
 > 为 0，本补丁是纯增量——`./scripts/check_upstream.sh` 每次都复核这两件事。
@@ -44,7 +44,7 @@ NS2 的《S2Arm》把主机画面直接 blit 到 layer，`host_adapt.m` 里写�
 | `nvn_hdr_hist.inc` | 每帧编码 + blit 回读 + 平滑（帧率归一化、白点死区、场景切换检测） |
 | `nvn_mtl.m` | 16F 上屏管线、`HdrCrop{rect,edge,knee,extra}` 16 float 常量、knee/head 接通 |
 | `nvn_hdr.h` 的 `s2a_hdr_status_line()` | `S2A_HDR_LOG=1` 时的诊断行（600 帧一行，字段与小数位固定，供真机远程判读） |
-| `host_adapt.m` | layer 改 `RGBA16Float` + `wantsExtendedDynamicRangeContent`（EDR 上界运行期由 `nvn_mtl.m:17631 hdr_head_tick()` 每帧读 layer 的 `maximumExtendedDynamicRangeColorComponent`，host 不重复读数） |
+| `host_adapt.m` | layer 改 `RGBA16Float` + `wantsExtendedDynamicRangeContent`（EDR 上界运行期由 `nvn_mtl.m` 的 `hdr_head_tick()` 每帧读屏幕 EDR headroom：iOS `UIScreen.currentEDRHeadroom` / macOS `NSScreen.maximumExtendedDynamicRangeColorComponentValue`，host 不重复读数） |
 | `nvn_present_fi.inc` | MetalFX 补帧链的四处 8 位硬编码参数化（HDR 下补帧不再破坏格式） |
 
 缺省**全关**（`S2A_HDR_FMT` / `S2A_HDR_OUTPUT` 都未设时行为与上游一致），
@@ -58,7 +58,7 @@ NS2 的《S2Arm》把主机画面直接 blit 到 layer，`host_adapt.m` 里写�
 ./scripts/report_options.py --check   # 47 个常数 / 9 个环境变量 与源码注释逐一对应
 ```
 
-- 31 套单测 **906 条断言**，全部纯 C、`-lm` 即可编，无第三方依赖；
+- 31 套单测 **912 条断言**，全部纯 C、`-lm` 即可编，无第三方依赖；
 - 诊断行格式有 19 条断言（`t_hdr_stat`）：字段名/小数位/截断语义/非有限值打 `n/a`——
   真机三格矩阵的取证全靠这一行，所以它本身也当契约来测；
   参考实现 `hdr_ref --stat-line` 打的是**同一份格式化代码**，所以「设备日志」与「本机复算」
@@ -110,7 +110,7 @@ MSL kernel、ObjC `.inc` 这些只在设备上执行的代码，编译不进本�
 | `present_encode_slot` / `present_encode_m4` 去掉 `id<MTLTexture> mirror` 参数（上游不再向镜像层画第二遍） | 早退行里的 `&& (!mirror \|\| present_blit(…, mirror, …))` 去掉；`hdr_hist_tick`、`#include "nvn_hdr_hist.inc"`、`hdr_dst` 判定块按新结构重新插 |
 | `present_blit` / `present_blit_m4` 签名**未变**（仍带 `int screen`） | 两处 `hdr_head_tick();` 与所有调用点都不用动 |
 
-结果：补丁 **42 文件 / +6947 −27 行 / `sha256 42f86d35fcc42857…`**，`check_landing.py` 56/56、
+结果：补丁 **42 文件 / +7163 −29 行 / `sha256 735bce9384318f55…`**，`check_landing.py` 56/56、
 `check_callsites.py`（16 定义 / 63 调用点）、`check_format_assumptions.py` 13/13 全过。
 
 ### 历史：2026-11-16 `0db51505` → `75eb4302`（371 个提交）
@@ -121,11 +121,11 @@ MSL kernel、ObjC `.inc` 这些只在设备上执行的代码，编译不进本�
 | --- | --- |
 | `present_blit(…, BOOL flip)` → `(…, BOOL flip, int screen)`；`present_blit_m4` 同样 | 两个函数首行的 `hdr_head_tick();` 重新插；**`screen=1` 只在画进画布那一次**（`0` 是拷进 AA/放大中间图，必须原样拷满，否则 #1169 SMAA 中/高左右留黑） |
 | `present_encode_slot` / `present_encode_m4` 重写（AA / MetalFX 分支结构变化） | `hdr_hist_tick(cb, src)`、`#include "nvn_hdr_hist.inc"`、`hdr_dst` 判定（16F 画布下 `fx=NULL`、不走 AA、告警一次）重新插进新结构，早退条件变成 `(!g_present_aa \|\| hdr_dst) && !fx` |
-| `fi_job` 中间帧分支带上了 `screen` 实参 | 16F 下中间帧改走 `present_blit_m4(cb, mid, dm.texture, NULL, …, flip, 1)`（`mid` 是 MetalFX 在**未扩张**域插出来的值，用 `fi_pass` 纯拷贝会让补出的帧比真帧暗 head 倍） |
+| `fi_job` 中间帧分支带上了 `screen` 实参 | 16F 下中间帧改走 `present_blit_m4(cb, mid, dm.texture, NULL, …, NO, 1)`（`mid` 写入 `in_tex` 时已按 `flip` 翻正且在**未扩张**域插值，用 `fi_pass` 纯拷贝会让补出的帧比真帧暗 head 倍、传 `flip` 会导致隔帧上下颠倒） |
 
 合并后必须核对的：`present_blit` / `present_blit_m4` 的**所有调用点**都带上了第 6 个实参（冲突列表不会报调用点，但不改就编译不过）。
 
-验证：`check_landing.py` 49/49（按函数范围断言，不按行号）、`run_all.sh /tmp/v08` rc=0（31 套 906 项 + ASan/UBSan + 10 份报告对账），补丁 41 文件 / 6673 行 / `sha256 f2e996e9771bda94…`。
+验证：`check_landing.py` 49/49（按函数范围断言，不按行号）、`run_all.sh /tmp/v08` rc=0（31 套 912 项 + ASan/UBSan + 10 份报告对账），补丁 41 文件 / 6673 行 / `sha256 f2e996e9771bda94…`。
 
 ### 历史：`dcd05e5` → `0db51505`（机械重放，9 个 hunk 全带 offset、反向 `cmp` 逐字节相同）
 
@@ -280,7 +280,7 @@ S2A_HDR_FMT=0`，8 位 + 声明 EDR）与上游截图对比来验——这也是
 
 | 场景 | 行为 | 上界 |
 |---|---|---|
-| 用户拖系统亮度 / 换屏 / 显示器切换 HDR | 每帧读 `maximumExtendedDynamicRangeColorComponent`，1% 死区外才更新 `head` | 钳在 `[1,4]` |
+| 用户拖系统亮度 / 换屏 / 显示器切换 HDR | 每帧读屏幕 EDR headroom（iOS `UIScreen.currentEDRHeadroom` / macOS `NSScreen.maximumExtendedDynamicRangeColorComponentValue`），1% 死区外才更新 `head` | 钳在 `[1,4]` |
 | 16F 画布连续 60 帧拿不到 drawable（起局、切后台不算） | 降级到 `BGRA8Unorm`，**格式 + EDR 标志 + 颜色空间三件套一起改**，head 归 1，重建管线并打日志 | 60 帧 ≈1 秒 |
 | 降级之后 16F 又变得可用（外接屏拔掉、系统 HDR 重新打开、分屏拖回全屏） | 600 帧（≈10 秒）试探一次 16F；失败则退避 ×2，封顶 600×8（≈80 秒）；16F 稳定后复位到 10 秒 | 试探不改任何持久设置 |
 
@@ -293,10 +293,10 @@ S2A_HDR_FMT=0`，8 位 + 声明 EDR）与上游截图对比来验——这也是
 
 ## 已知未验证（写在这里，不藏）
 
-1. **MSL 只做过语法级验证**：本机无 Metal 编译器。通过 `xcrun metal -std=metal3.0 -c` 的是
-   `hdr_hist.metal` 与 8 位直通上屏 shader（CI run `43729862796`）；**当前的 3555 B HDR fragment
-   shader 与 16F 上屏路径从未过 Apple 编译器**（GitHub 账号停用后 CI 不可触发）。静态守卫
-   `scripts/check_msl.py` 72 项（4 个 MSL 文件）只查禁用类型、括号配平、属性重复这类结构问题；
+1. **MSL 仅过本机 Xcode 16.2 编译与静态守卫**：本机 macOS VM（Xcode 16.2 / iOS 18.2 SDK）已用
+   `xcrun -sdk iphoneos metal -std=metal3.0 -Wall -c` 通过全部 **5 份 MSL**（含 `hdr_hist.metal`、
+   8 位直通、**3670 B HDR fragment**、补帧 `fi_mv` 与 `fi_copy`，0 错误 0 警告）；另有静态守卫
+   `scripts/check_msl.py` 99 项（5 个 MSL 文件）；
 2. **ObjC 只做过 `clang -fsyntax-only`**（对 `nvn_mtl.m` / `host_adapt.m`，无链接、无运行）；
 3. 真机三格矩阵尚未跑：T1 `S2A_HDR_FMT=1`（只换格式）、T2 `S2A_HDR_OUTPUT=1`（总开关；`FMT=1` 可叠加）、T3 `FMT=0`（只开 EDR）——组合语义在 `s2a_hdr_out_plan`，单测 `t_hdr_env` 37 项；
    判据已脚本化为 `./scripts/check_device_log.py --log <logcat> --expect t1|t2|t3`——它认的是

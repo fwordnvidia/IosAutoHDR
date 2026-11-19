@@ -55,7 +55,7 @@ SpecialK / BT.2087 / BT.2408-8 / Apple EDR / Microsoft scRGB，每条都写「�
 ./scripts/dispatch_ci.sh            # A 路线一条命令：推 workflow → 触发 → 等 → 判读（默认 dry-run）
 ./scripts/report_steps.py           # 重生 docs/STEPS.md（全部闸门步骤的索引；--check 挡漂移）
 ./scripts/check_patch_symbols.py <树>   # 补丁改过的 ObjC/MSL 里每个前缀符号都得有定义（Linux 侧从不编译它们）
-./scripts/check_msl_symbols.py <树>     # 着色器里每个前缀符号都得在 MSL 里有定义（3555 B HDR fragment 从未真编）
+./scripts/check_msl_symbols.py <树>     # 着色器里每个前缀符号都得在 MSL 里有定义（3670 B HDR fragment 等）
 ./scripts/check_patch_fresh.py <树>     # src/ 与补丁打出来的树逐字节一致（补丁是发货内容，src 是真相源）
 ./scripts/check_patch_tools.sh <树>     # git apply 与 GNU patch -p1 结果逐字节一致（别让使用者跑出我们没测的那份）
 ./scripts/check_github.sh              # 远端状态与仓库声称一致（许可/分支/无自动 CI/HEAD 同源；要网络，不在 run_all 里）
@@ -144,7 +144,7 @@ git apply -v /path/to/hdr-auto/patch/hdr-auto-l1.patch
 
 ```bash
 ./verify.sh /path/to/s2arm     # 打补丁 → 编三套单测 → 跑
-./run_all.sh /path/to/s2arm    # 全部闸门：31 套 906 项 + 落点 + MSL 静态 + 10 份报告对账 + ASan/UBSan
+./run_all.sh /path/to/s2arm    # 全部闸门：31 套 912 项 + 落点 + MSL 静态 + 10 份报告对账 + ASan/UBSan
 ./scripts/sanitize.sh          # 只跑内存/UB 闸门（ASan+UBSan，halt_on_error=1，约 15 s）
 ./scripts/check_callsites.py    # 调用点实参个数（上游改签名时 patch 只报定义，调用点全靠这条）
 ./scripts/check_device_coverage.py  # 设备侧代码登记表（哪些有对账、哪些写明不做的理由）
@@ -174,7 +174,7 @@ vim src/nvn_hdr.h              # src/ 是唯一真相源
 ✓ t_hdr_robust：下标 / 空直方图 / uint32 溢出 / 垃圾上一帧状态 / 20 万次 fuzz 15 项 → 全过
 ```
 
-补丁本体：`patch/hdr-auto-l1.patch`，**42 文件 +6947 行**（−27），`sha256 42f86d35fcc42857b10d1ada30b3371f123973059bbd2181fd9679cb7b233033`。
+补丁本体：`patch/hdr-auto-l1.patch`，**42 文件 +7163 行**（−29），`sha256 735bce9384318f5520cb3003825f40f6ec71940d09259e1c51f4420574b1290f`。
 
 补丁同时修了一个会直接编译失败的缺口：`nvn_hdr_hist.inc` 要 `#include "nvn_hdr_hist_msl.h"`，而该基线的 `graphics/nvn/Makefile` 里**没有**生成它的规则（`GENH` 只列 `gal_tess_msl.h`）。补丁补上 `GENH` 条目与 `embed_msl.py` 规则，否则这条链路一被 include 就断。
 
@@ -182,7 +182,7 @@ vim src/nvn_hdr.h              # src/ 是唯一真相源
 
 | 项 | 状态 |
 |---|---|
-| 参数层（纯 C） | ✅ **906** 条断言（31 套）全绿，可在 Linux/CI 复跑；含四场景 nit 量化（`t_hdr_quality`） |
+| 参数层（纯 C） | ✅ **912** 条断言（31 套）全绿，可在 Linux/CI 复跑；含四场景 nit 量化（`t_hdr_quality`） |
 | 补丁可打性 | ✅ 干净 `d5cbf7ff53f7` 树 `git apply` rc=0 |
 | `hdr_hist.metal` 编译 | ✅ 这一个文件（`hdr_hist.metal`）过过 `xcrun -sdk iphoneos metal -std=metal3.0 -c` 编 `hdr_hist.metal`（第一次就抓出 MSL 里没有 `double`，已改 float）。**别的 MSL 不在这条里**，见下一行 |
 | 嵌入规则 | ✅ 本机 `embed_msl.py` 产出 7,756 B 头文件 |
@@ -195,7 +195,7 @@ vim src/nvn_hdr.h              # src/ 是唯一真相源
 | 带阶 | ✅ 实测：中间调台阶放大 **1.000×**，最坏 **3.35×**（高白点时 6.6×）；16F 相对余量 96×，**不需要输出抖动** |
 | 时间稳定性 | ✅ 实测：噪声 1%→20% 下 knee 逐帧变化 **0.00%**（量化+smoothing 足够，不需迟滞）；噪声越重白点上移越多（20% 时 +0.55 stop） |
 | 色域 / 饱和度 | ✅ `S2A_HDR_P3`（BT.2087 sRGB→P3，按行归一化保证灰恒定）与 `S2A_HDR_SAT`（保亮度）；两级都带恒等短路，缺省逐位等同没有这两个旋钮 |
-| MSL 编译 | ⚠️ **只编过两处**：`hdr_hist.metal`（run 43727751120，去 `double` 后 `air: 8736 B`）与 8 位直通上屏 shader。**HDR fragment（3555 B）与 16F 上屏路径从未过 `xcrun metal`**（GitHub 账号停用后 CI 不可触发），本地只有 `scripts/check_msl.py` 72 项结构守卫（4 个 MSL 文件）——2026-11-17 起把 `nvn_present_fi.inc` 里补帧的两段（`fi_mv_setup` 的 down/match/spread 与 `fi_copy_setup` 的缩拷）也纳进来了：它们此前既不进静态守卫、也不进真编译 |
+| MSL 编译 | ✅ 本机 macOS VM（Xcode 16.2 / iOS 18.2 SDK）已用 `xcrun -sdk iphoneos metal -std=metal3.0 -Wall -c` 编译全部 **5 份 MSL**（`hdr_hist.metal`、8 位直通、**HDR fragment 3670 B**、补帧 `fi_mv` 与 `fi_copy`），全部 **0 错误 0 警告**；本地另有 `scripts/check_msl.py` 99 项静态结构守卫（5 个 MSL 文件） |
 | ObjC 编译 | ✅ `hdr-check` 第 6 步：生成 gen 头后用 `clang -fsyntax-only -fobjc-arc -arch arm64 -isysroot iphoneos` 编 `nvn_mtl.m`（16k 行）与 `host_adapt.m`，两者 **rc=0**（run 43728394548）。这是语法/类型级验证，不是链接与整包构建 |
 | 与 0.4.0 补帧共存 | ✅ 补帧链四处格式参数化（含 `fi_commit` 的 `present_pipeline`），MetalFX 不收 16F 时退回 8 位并告警（run 43729167355 语法闸门 rc=0） |
 | 16F 下 AA / MetalFX 放大 | ⬜ 内部图仍是 8 位，当前跳过并打黄字 |

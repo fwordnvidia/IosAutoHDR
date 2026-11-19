@@ -97,11 +97,17 @@ def main():
     elif lay >= 0 and pin > lay:
         fails.append("H3:%d hdr_head_tick() 的让位判据排在读图层之后（顺序反了也可以，但别写成两个分支）" % i0)
 
-    # H7：必须有一条**正面**日志 —— 光看「head 是几」分不出「跟随没跑」与「屏幕本来就这么亮」
-    if "EDR 上界跟随已启用" not in "\n".join(body):
+    # H7：必须有一条**正面**日志，且读屏幕 EDR 必须用真实 Apple API（UIScreen.currentEDRHeadroom /
+    #     NSScreen.maximumExtendedDynamicRangeColorComponentValue），不能调 CAMetalLayer 不存在的选择器
+    body_text = "\n".join(body)
+    if "EDR 上界跟随已启用" not in body_text:
         fails.append("H7:%d hdr_head_tick() 里没有「EDR 上界跟随已启用」那行日志 —— "
                      "设备日志里就再没有「这条路径真的跑到了」的正面证据，"
                      "指针又变 nil 时只能靠人猜" % i0)
+    if "[layer maximumExtendedDynamicRangeColorComponent]" in body_text:
+        fails.append("H7:%d hdr_head_tick() 仍在调用 CAMetalLayer 不存在的选择器 maximumExtendedDynamicRangeColorComponent（ARC 下编译失败）" % i0)
+    if "currentEDRHeadroom" not in body_text or "maximumExtendedDynamicRangeColorComponentValue" not in body_text:
+        fails.append("H7:%d hdr_head_tick() 缺少 iOS/macOS 真实屏幕 EDR 属性名" % i0)
 
     # H4/H5/H6：取不到 drawable 的块
     j0, j1, nil = block(lines, "if (!dr) {", "if (!dr) 块")
@@ -128,8 +134,16 @@ def main():
                 fails.append("H6:%d 回头路块没把 %s 装回去 —— 重新试探的 16F 画布会缺一角" % (j0 + rearm[0], why))
 
     # H8：图层 HDR 属性在 host_adapt.m 里设（nvn_mtl 只负责运行时跟随）。两个分支各一次调用，
-    #     少一侧那条路径的 HDR 就是静默不生效 —— 与 Metal 3 那次同一个病，只是换了个文件。
-    ha = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src", "host_adapt.m")
+    #     且 s2a_out_layer_hdr / s2a_out_pixel_format 必须定义在 #if TARGET_OS_IPHONE 之前，
+    #     否则 macOS 分支编译报 undeclared function。
+    if len(sys.argv) > 1:
+        ha = os.path.join(ROOT, "graphics", "nvn", "host_adapt.m")
+        inc_p = os.path.join(ROOT, "graphics", "nvn", "gfx", "nvn", "nvn_hdr_hist.inc")
+        fi_p = os.path.join(ROOT, "graphics", "nvn", "gfx", "nvn", "nvn_present_fi.inc")
+    else:
+        ha = os.path.join(HERE, "src", "host_adapt.m")
+        inc_p = os.path.join(HERE, "src", "nvn_hdr_hist.inc")
+        fi_p = os.path.join(HERE, "src", "nvn_present_fi.inc")
     if os.path.exists(ha):
         hat = read(ha)
         calls = [i + 1 for i, l in enumerate(hat) if "s2a_out_layer_hdr(" in l and "static void s2a_out_layer_hdr" not in l]
@@ -139,18 +153,43 @@ def main():
                          "—— 少的那一侧 EDR 声明与颜色空间都没设，HDR 静默不生效"
                          % (calls[0] if calls else 1, len(calls)))
         try:
-            _i, _j, blines = block(hat, "static void s2a_out_layer_hdr(", "s2a_out_layer_hdr()")
+            def_i, _j, blines = block(hat, "static void s2a_out_layer_hdr(", "s2a_out_layer_hdr()")
         except SystemExit:
-            blines = None
+            def_i, blines = -1, None
         if blines:
+            # 必须定义在包住 front_metal_layer 的 `#if TARGET_OS_IPHONE` 之前
+            front_if = next((i for i, l in enumerate(hat) if l.strip() == "#if TARGET_OS_IPHONE" and i > 100), -1)
+            if front_if >= 0 and def_i > front_if:
+                fails.append("H8:%d s2a_out_layer_hdr() 定义在 #if TARGET_OS_IPHONE（第 %d 行）之内，macOS 构建编不过"
+                             % (def_i + 1, front_if + 1))
             body = "\n".join(blines)
             for pat, why in (("s2a_out_edr_wanted()", "EDR 意图判据"),
                              ("wantsExtendedDynamicRangeContent = YES", "EDR 声明"),
                              ("kCGColorSpaceExtendedLinearSRGB", "扩展线性 sRGB 颜色空间")):
                 if pat not in body:
                     fails.append("H8 s2a_out_layer_hdr() 里缺 %s —— 图层只拿到像素格式、没有 HDR 声明" % why)
+            if "if (!w16) return;" not in body:
+                fails.append("H8 s2a_out_layer_hdr() 未按 16F 门控线性色彩空间 —— T3（8 位 + EDR）会被误设线性空间导致泛白")
         else:
             fails.append("H8 找不到 s2a_out_layer_hdr() 的函数体")
+
+    # H9：nvn_hdr_hist.inc 设备侧不变量（防重定义编译错 / 死门控 / _sRGB 双解码）
+    if os.path.exists(inc_p):
+        inc_t = "\n".join(read(inc_p))
+        if re.search(r"addCompletedHandler:\^\([^)]*\bb\b[^)]*\)", inc_t) and "s2a_hdr_auto_l1b b;" in inc_t:
+            fails.append("H9 nvn_hdr_hist.inc 的 addCompletedHandler 块参数 b 与局部 s2a_hdr_auto_l1b b 重定义（ARC 下必编不过）")
+        if "if (!(v[0] > 0.0f)) return;" in inc_t:
+            fails.append("H9 nvn_hdr_hist.inc 仍有未调度 f->out 的 v[0] 门控 —— 回调每帧必早退，S2A_HDR_AUTO 完全失效")
+        if "present_raw_src(src)" not in inc_t:
+            fails.append("H9 nvn_hdr_hist.inc 未用 present_raw_src(src) 剥掉 _sRGB —— texture2d::read() 会二次解码 sRGB")
+
+    # H10：nvn_present_fi.inc 的 HDR 补帧不变量（mid 不二次翻转 / 像素格式变化重建）
+    if os.path.exists(fi_p):
+        fi_t = "\n".join(read(fi_p))
+        if "present_blit_m4(cb, mid, dm.texture, NULL, f->uv[2], f->tab[2], flip, 1)" in fi_t:
+            fails.append("H10 nvn_present_fi.inc 上屏 mid 时传了 flip —— mid 已在写入 in_tex 时翻正，传 flip 会隔帧上下倒置")
+        if "f->hpf != layer.pixelFormat" not in fi_t:
+            fails.append("H10 nvn_present_fi.inc 的 fi_get 在层像素格式改变时不重建 NvPresentFI")
 
     # 附：纯 C 侧的让位判据必须与 itm_params 同一套解析（两者都在 nvn_hdr.h，改了要对齐）
     hdr = "\n".join(read(HDR))
@@ -162,7 +201,7 @@ def main():
     if fails:
         print("✗ HDR 钩子检查：%d 处" % len(fails))
         return 1
-    print("✓ HDR 钩子：图层每帧记、两处 tick、让位判据、降级与回头路成对、跟随有正面日志（%d 条）" % 8)
+    print("✓ HDR 钩子：图层每帧记、两处 tick、真 EDR API、降级/回头路成对、iOS/Mac 可见、直方图与补帧守卫（%d 条）" % 10)
     return 0
 
 

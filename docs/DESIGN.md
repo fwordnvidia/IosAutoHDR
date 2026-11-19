@@ -593,8 +593,8 @@ id<MTLBlitCommandEncoder> be = [cb blitCommandEncoder];
 ## 调色后超上界：等比缩放，而不是逐通道钳位
 
 Display P3 混色与饱和度缩放都会把某个通道推高。实测 `sat=3.0`、`p3=0` 时，蓝通道可到
-`head+2.05`（`head=2.0` ⇒ 4.05）。16F 画布并非「想写多大都行」：超过
-`maximumExtendedDynamicRangeColorComponent` 的部分由系统**直接钳**（Apple
+`head+2.05`（`head=2.0` ⇒ 4.05）。16F 画布并非「想写多大都行」：超过当前屏幕
+EDR 上界（iOS `UIScreen.currentEDRHeadroom` / macOS `NSScreen.maximumExtendedDynamicRangeColorComponentValue`）的部分由系统**直接钳**（Apple
 《Performing your own tone mapping》），钳位会切出色块并把色相推走——正是保色相的努力要避免的。
 
 所以 `s2a_hdr_clip_head()` 用**等比缩放**：取三元组最大值 `m`，`m > head` 时整体乘 `head/m`，
@@ -709,8 +709,8 @@ if (m.wantsExtendedDynamicRangeContent!=game.wantsExtendedDynamicRangeContent) m
 
 ## 运行期 EDR 上界跟随：为什么它曾经在 Metal 3 上完全没跑
 
-Apple 的说明是「1.0 对应 SDR 最大亮度、可用 headroom 随时会变」，所以宿主每帧读一次
-`CAMetalLayer.maximumExtendedDynamicRangeColorComponent`，用 1% 死区过滤后写
+Apple 的说明是「1.0 对应 SDR 最大亮度、可用 headroom 随时会变」，所以宿主每帧读一次当前屏幕
+EDR 上界（iOS `UIScreen.currentEDRHeadroom` / macOS `NSScreen.maximumExtendedDynamicRangeColorComponentValue`），用 1% 死区过滤后写
 `s2a_hdr_head_set()`；上屏 buffer（`g_hdr_knee[2]`）与 CPU 侧 ITM 读同一个值 ——
 否则屏幕切到 SDR（上界 1.0）之后画面还在按 2.0 扩张，超出部分被系统硬钳（切色块/偏色）；
 XDR 屏（4.0）又只用到一半。
@@ -737,5 +737,5 @@ if (!g_m3 && g_present_layer_resident != layer) { [g_q4 addResidencySet:layer.re
 并只打一行日志说明「要跟随就 unset 它」。
 
 教训：**「每帧都跑的函数」和「它读的那个变量有没有被赋值」是两件事**。前者有日志、
-有调用点、测试全绿，都不证明后者成立；这类缺陷只能在结构层面钉住（`0w20/5` 的 8 条不变量），
+有调用点、测试全绿，都不证明后者成立；这类缺陷只能在结构层面钉住（`0w20/5` 的 10 条不变量），
 因为设备侧代码在 Linux 侧从不编译。

@@ -19,8 +19,10 @@
 set -u
 BUNDLE=${1:-}
 OUT=${2:-/tmp/host.log}
-MNT=${MNT:-/tmp/s2a-dev-docs}
 IOSKIT=${IOSKIT:-$HOME/.local/ios-kit/bin}
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/s2a-fetch.XXXXXX") || exit 1
+MNT=${MNT:-$WORK/mnt}
+trap 'fusermount -u "$MNT" 2>/dev/null || umount "$MNT" 2>/dev/null || true; rm -rf "$WORK"' EXIT
 
 if [ -z "$BUNDLE" ]; then
     echo "用法：$0 <bundle-id> [输出文件=/tmp/host.log]"
@@ -35,7 +37,7 @@ fi
 # ── 路径 A：house_arrest，只要 UIFileSharingEnabled ──────────────────────────
 if [ -x "$IOSKIT/ifuse" ]; then
     mkdir -p "$MNT"
-    if "$IOSKIT/ifuse" --documents "$BUNDLE" "$MNT" 2>/tmp/s2a-ifuse.err; then
+    if "$IOSKIT/ifuse" --documents "$BUNDLE" "$MNT" 2>"$WORK/ifuse.err"; then
         if [ -f "$MNT/host.log" ]; then
             cp "$MNT/host.log" "$OUT" || { echo "✗ 复制失败：$MNT/host.log → $OUT"; fusermount -u "$MNT" 2>/dev/null; exit 1; }
             fusermount -u "$MNT" 2>/dev/null || umount "$MNT" 2>/dev/null
@@ -47,7 +49,7 @@ if [ -x "$IOSKIT/ifuse" ]; then
         ls "$MNT" 2>/dev/null | head -5 | sed 's/^/    /'
         fusermount -u "$MNT" 2>/dev/null || umount "$MNT" 2>/dev/null
     else
-        echo "· 路径 A 不可用：$(head -2 /tmp/s2a-ifuse.err 2>/dev/null | tr '\n' ' ')"
+        echo "· 路径 A 不可用：$(head -2 "$WORK/ifuse.err" 2>/dev/null | tr '\n' ' ')"
     fi
 fi
 
@@ -56,21 +58,21 @@ if [ -x "$IOSKIT/ios" ]; then
     echo "· 试路径 B（userspace 隧道 + ios file pull，需要 sudo）"
     if sudo -n true 2>/dev/null; then
         pkill -f '[t]unnel start' 2>/dev/null
-        # shellcheck disable=SC2024  # /tmp 本用户可写，重定向打开的 fd 由 root 继承，日志写得进去
+        # shellcheck disable=SC2024  # 私有 mktemp 目录本用户可写，重定向打开的 fd 由 root 继承
         sudo -n env ENABLE_GO_IOS_AGENT=user nohup "$IOSKIT/ios" tunnel start --userspace \
-            --tunnel-info-port=28100 >/tmp/s2a-tun.log 2>&1 &
+            --tunnel-info-port=28100 >"$WORK/tun.log" 2>&1 &
         sleep 10
-        if grep -q 'userspace tunnel negotiated' /tmp/s2a-tun.log 2>/dev/null; then
+        if grep -q 'userspace tunnel negotiated' "$WORK/tun.log" 2>/dev/null; then
             if "$IOSKIT/ios" file pull --app="$BUNDLE" --remote=/Documents/host.log --local="$OUT" \
-                    --nojson --tunnel-info-port=28100 2>/tmp/s2a-pull.err; then
+                    --nojson --tunnel-info-port=28100 2>"$WORK/pull.err"; then
                 pkill -f '[t]unnel start' 2>/dev/null
                 echo "✓ 已用 file pull 拉到 $OUT（$(wc -c < "$OUT") B）"
                 echo "  下一步：./scripts/check_device_log.py --log $OUT --expect t2"
                 exit 0
             fi
-            echo "· file pull 失败：$(grep -oE 'ErrorDomain:[A-Za-z]+|ErrorCode:[0-9]+' /tmp/s2a-pull.err 2>/dev/null | tr '\n' ' ')"
+            echo "· file pull 失败：$(grep -oE 'ErrorDomain:[A-Za-z]+|ErrorCode:[0-9]+' "$WORK/pull.err" 2>/dev/null | tr '\n' ' ')"
         else
-            echo "· 隧道没起来，见 /tmp/s2a-tun.log"
+            echo "· 隧道没起来，日志前两行：$(head -2 "$WORK/tun.log" 2>/dev/null | tr '\n' ' ')"
         fi
         pkill -f '[t]unnel start' 2>/dev/null
     else

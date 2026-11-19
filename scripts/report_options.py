@@ -161,7 +161,7 @@ def build():
         "S2A_HDR_AUTO": "1 = 打开自动判定（直方图 → 纸白 → 拐点）；缺省关，关时整条 HDR 链路逐字节同以前",
         "S2A_HDR_OUTPUT": "1 = 总开关：16F 画布 + 声明 EDR（三格矩阵的 T2，head 才会 >1）",
         "S2A_HDR_FMT": "1 = 只换 16F 画布、不声明 EDR（T1，分辨黑屏归因）；0 = 只声明 EDR、画布留 8 位（T3）",
-        "S2A_HDR_HEADROOM": "覆盖 EDR 上界（钳 [1,4]）；不设则每帧读 layer 的 maximumExtendedDynamicRangeColorComponent",
+        "S2A_HDR_HEADROOM": "覆盖 EDR 上界（钳 [1,4]）；不设则每帧读屏幕 EDR 上界（iOS：UIScreen.currentEDRHeadroom；macOS：NSScreen.maximumExtendedDynamicRangeColorComponentValue）",
         "S2A_HDR_MAP": "0/缺省 = 拐点档；1/bt2408/content = BT.2408 内容映射（整幅抬起，knee 只作日志）",
         "S2A_HDR_LOG": "1 = 每 600 帧打一行 `HDR stat:`（真机判读与三格矩阵全靠它）",
         "S2A_HDR_SAT": "饱和度倍数，钳 [0.5,2]，1 = 不动（CIELAB 里缩放 a*/b*，保色相）",

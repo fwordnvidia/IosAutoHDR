@@ -11,7 +11,11 @@
 #include <math.h>
 
 // ——— 逐行翻译自 src/nvn_mtl.m 的 src_msl_hdr（fs 主体）———
-static inline float msl_lin(float c) { return c <= 0.04045f ? c / 12.92f : powf((c + 0.055f) / 1.055f, 2.4f); }
+static inline float msl_lin(float c) {
+    if (!(c > 0.0f)) return 0.0f;
+    if (c >= 1.0f) return 1.0f;
+    return c <= 0.04045f ? c / 12.92f : powf((c + 0.055f) / 1.055f, 2.4f);
+}
 static inline float msl_lab_f(float t) { return t > 0.008856f ? powf(t, 1.0f / 3.0f) : (7.787f * t + 16.0f / 116.0f); }
 static inline float msl_lab_finv(float t) { float t3 = t * t * t; return t3 > 0.008856f ? t3 : (t - 16.0f / 116.0f) / 7.787f; }
 
@@ -30,13 +34,15 @@ static void msl_lab_lin(const float lab[3], float rgb[3]) {
     rgb[1] = -0.9692660f * x + 1.8760108f * y + 0.0415560f * z;
     rgb[2] = 0.0556434f * x - 0.2040259f * y + 1.0572252f * z;
 }
-// MSL `s2a_clip_head` 的逐行转写：超 head 等比缩放、负值夹 0。
+// MSL `s2a_clip_head` 的逐行转写：先滤除 NaN/负值，再超 head 等比缩放。
 static void msl_clip_head(const float in[3], float head, float out[3]) {
     if (!(head > 0.0f)) head = 1.0f;
-    float m = in[0] > in[1] ? in[0] : in[1];
-    if (in[2] > m) m = in[2];
+    float s[3];
+    for (int i = 0; i < 3; i++) s[i] = (isfinite(in[i]) && in[i] > 0.0f) ? in[i] : 0.0f;
+    float m = s[0] > s[1] ? s[0] : s[1];
+    if (s[2] > m) m = s[2];
     float k = (m > head) ? head / m : 1.0f;
-    for (int i = 0; i < 3; i++) { float v = in[i] * k; out[i] = v > 0.0f ? v : 0.0f; }
+    for (int i = 0; i < 3; i++) { float v = s[i] * k; out[i] = v > 0.0f ? v : 0.0f; }
 }
 
 static float msl_sat_min(const float lab[3], float s) {

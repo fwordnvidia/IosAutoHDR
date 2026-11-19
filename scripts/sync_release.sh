@@ -13,7 +13,7 @@ MSG=""; [ "${2:-}" = "--commit" ] && MSG=${3:-sync}
 [ -d "$DST/.git" ] || { echo "✗ $DST 不是 git 仓库"; exit 1; }
 
 # 自写源码（唯一真相源里的、属于我们的那部分）
-SRC_OK="nvn_hdr.h nvn_hdr_auto.h nvn_hdr_auto_l1.h nvn_hdr_hist.inc"
+SRC_OK="nvn_hdr.h nvn_hdr_auto.h nvn_hdr_auto_l1.h nvn_hdr_msl.h nvn_hdr_msl_hist.h nvn_hdr_hist.inc hdr_hist.metal"
 for f in $SRC_OK; do cp "$ROOT/src/$f" "$DST/src/$f" || exit 1; done
 for f in "$ROOT"/src/t_hdr*.c; do cp "$f" "$DST/src/"; done
 # 测试用真实照片（三张 480x270 PPM，来源与授权见 docs/SOURCES.md）。
@@ -38,12 +38,12 @@ for f in "$ROOT"/scripts/* "$ROOT"/tools/* "$ROOT"/testdata/*; do
     _dst="$DST/${f#$ROOT/}"
     [ -e "$_dst" ] && chmod +x "$_dst"
 done
-for f in run_all.sh verify.sh; do [ -x "$ROOT/$f" ] && chmod +x "$DST/$f"; done
 cp "$ROOT/README.md" "$DST/README.md"
 # 根级入口脚本：投影的「接收步骤」写的就是 `./run_all.sh <树>` / `./verify.sh <树>`，
 # 但白名单此前只拷了 README 与 src/docs/patch/tools/scripts —— 于是公开仓库里根本没有这两个文件，
 # 照文档做的人第一步就 command not found。2026-11-17 消费端测试发现（tar 包里有，投影里没有）。
 cp "$ROOT/run_all.sh" "$ROOT/verify.sh" "$DST/" || exit 1
+for f in run_all.sh verify.sh; do [ -x "$ROOT/$f" ] && chmod +x "$DST/$f"; done
 # 根级社区档案：GitHub 只认根级或 .github/ 下的这几个文件名，而投影按设计不带 .github/
 # （见上面 CI 那条），所以只能放根级。缺了它们仓库页会一直提示「添加贡献指南」，
 # 社区档案 health 停在 42%。

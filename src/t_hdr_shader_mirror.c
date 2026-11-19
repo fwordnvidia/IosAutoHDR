@@ -143,6 +143,30 @@ int main(void) {
         OK("边界旋钮：sat=0 全去色、p3=1.5 过冲夹紧，两侧一致");
     }
 
+    // 场景七：异常编码输入（NaN / 负值 / >1.0）不得把 NaN 或负值透传到 16F 画布，且与 CPU 侧一致
+    {
+        float nanv = NAN;
+        float cases[3][3] = {
+            {nanv, 0.5f, 0.8f},
+            {-0.5f, 0.0f, 1.5f},
+            {nanv, -1.0f, nanv},
+        };
+        s2a_hdr_itm p; p.head = 2.5f; p.knee_lo = 0.4f; p.knee_hi = 1.0f;
+        int ok = 1;
+        for (int ci = 0; ci < 3; ci++) {
+            float lin[3], a[3], b[3];
+            for (int k = 0; k < 3; k++) lin[k] = s2a_hdr_to_linear(cases[ci][k]);
+            msl_fs(cases[ci], p.knee_lo, p.knee_hi, p.head, 1.0f, 0.0f, a);
+            s2a_hdr_grade_rgb(&p, 1.0f, 0.0f, lin, b);
+            for (int k = 0; k < 3; k++) {
+                if (!isfinite(a[k]) || a[k] < 0.0f || a[k] > p.head + 1e-5f) ok = 0;
+                if (fabsf(a[k] - b[k]) > 1e-6f) ok = 0;
+            }
+        }
+        CHECK(ok, "NaN / 负值 / >1.0 输入：上屏输出必须有限、非负、<=head 且与 CPU 一致");
+        OK("异常编码输入：NaN / 负值 / >1.0 全部安全夹紧且双端一致");
+    }
+
     printf("%s t_hdr_shader_mirror：上屏 shader 对账 %d 项（失败 %d）\n", fails ? "✗" : "✓", checks, fails);
     return fails ? 1 : 0;
 }

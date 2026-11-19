@@ -7,7 +7,7 @@
 
 ```bash
 ./run_all.sh                      # 不需要 S2Arm 树：自检 + 敏感度 + 曲线图
-./run_all.sh /tmp/v09             # 额外：把补丁打进干净 d5cbf7ff53f7 树跑 31 套单测（906 项）
+./run_all.sh /tmp/v09             # 额外：把补丁打进干净 d5cbf7ff53f7 树跑 31 套单测（912 项）
 ```
 
 `run_all.sh` 返回 0 才算通过。步骤：`0/5` 量化报告 → `1/5` 参考 CLI → `2/5` HUD 平台区 →
@@ -21,7 +21,7 @@ concurrency、timeout ≤20 分钟、不许 matrix / `secrets.` / `xcodebuild`�
 `0w18/5` Python lint（34 个脚本过 ruff E9/F/B905，`zip` 必须写 `strict=`）→
 `0w19/5` 社区文件结构（`.github/ISSUE_TEMPLATE/*.yml` 的 type/id/attributes/validations 逐项核；
 GitHub 对写错的表单是**静默忽略**——仓库页上不出现，本地却干干净净）→
-`0w20/5` HDR 钩子不变量（8 条结构断言：图层指针每帧都记、两个 present 入口都调 `hdr_head_tick()`、
+`0w20/5` HDR 钩子不变量（10 条结构断言：图层指针每帧都记、两个 present 入口都调 `hdr_head_tick()`、
 显式 `S2A_HDR_HEADROOM` 让位、取不到 drawable 的块里降级与回头路成对、降级块同时改像素格式与
 颜色空间、回头路块把 16F/EDR/扩展线性 sRGB 三件装回、`host_adapt.m` 的 iOS/Mac 两个分支
 各调一次 `s2a_out_layer_hdr()` 且那里同时设 EDR 声明与扩展线性 sRGB；这些行在 Linux 侧**从不编译**，
@@ -47,7 +47,7 @@ GitHub 对写错的表单是**静默忽略**——仓库页上不出现，本地
 `4d/5` MSL 符号对账（`4c/5` 剥字符串时把 MSL 源码整个剥掉了，所以着色器那一层要单独核：
 `nvn_mtl.m` 的 `src_msl` / `src_msl_hdr`、`nvn_present_fi.inc` 的两段、`hdr_hist.metal`
 里的 `s2a_*` / `nvn_hdr_*` / `hdr_*` / `to_*` 标识符，每个都必须在这些 MSL 源码的定义位置
-出现过——3555 B 的 HDR fragment 从未过 `xcrun metal`，`to_enc`→`to_encd` 这种错只有这里能红） →
+出现过——`to_enc`→`to_encd` 这种错在无 Metal 编译器环境下只有这里能红） →
 `4e/5` 补丁新鲜度（`src/` 是唯一真相源、补丁是它的**产物**：遍历 `src/*` 按
 `make_patch.sh` 的同一套映射算出树里路径并逐字节比较，反向再要求补丁里每个文件都有
 `src/` 来源。不同步时 4/5 测的是补丁里的旧内容、`check_counts`/`check_msl` 核的是
@@ -77,7 +77,7 @@ GNU patch 也不许报 `with fuzz`——fuzz 意味着上下文差几行它自�
 | 结论 | 命令 | 期望 |
 |---|---|---|
 | 补丁能在干净 `d5cbf7ff53f7` 上无冲突应用 | `git apply --check patch/hdr-auto-l1.patch`（在干净树） | 0 退出；42 个文件 |
-| 补丁文件指纹 | `sha256sum patch/hdr-auto-l1.patch` | `42f86d35…`（42 文件，+6947 −27 行） |
+| 补丁文件指纹 | `sha256sum patch/hdr-auto-l1.patch` | `735bce93…`（42 文件，+7163 −29 行） |
 | MSL 能按 Makefile 规则嵌入 | `python3 graphics/metal/tools/embed_msl.py graphics/nvn/shaders/hdr_hist.metal k_hdr_hist out.h` | 7,948 B |
 
 上游跟随：`./scripts/check_upstream.sh` 会同时报**默认分支**与**最新 tag**，并以默认分支上能否干净打上为准
@@ -111,7 +111,7 @@ HDR stat: fmt=16F head=2.00 knee=0.3400+0.6600 white=0.7900 avg=-1.20 scene=0.00
 ```
 
 - `fmt` 是**当前画布**（`16F`/`8B`），`itm` 是上屏是否真走扩张；`fmt=16F itm=0` 说明管线没重建；
-- `head` 是运行期 EDR 上界（`maximumExtendedDynamicRangeColorComponent`，钳 `[1,4]`）；
+- `head` 是运行期 EDR 上界（iOS `UIScreen.currentEDRHeadroom` / macOS `NSScreen.maximumExtendedDynamicRangeColorComponentValue`，钳 `[1,4]`）；
 - `knee` 打成 `lo+delta`，与原子槽打包口径一致；`frozen=1` 表示本帧被判淡出/暗场、拐点保持；
 - `avg`/`scene` 非有限时打 `n/a`（首帧、空直方图不灌 `nan` 进日志）。
 
@@ -155,7 +155,7 @@ HDR stat: fmt=16F head=2.00 knee=0.7424+0.2576 white=0.7424 avg=-3.89 scene=0.00
 `run_all.sh` 的 `0x/5` 会跑自测，并用 `hdr_ref --stat-line` 的真行验两个方向（T2 必须通过、
 T3 必须失败），避免判据只会点头。
 
-## 算法（31 套单测，906 项）
+## 算法（31 套单测，912 项）
 
 | 套 | 命令（在打过补丁的树） | 期望 |
 |---|---|---|
@@ -172,14 +172,14 @@ T3 必须失败），避免判据只会点头。
 | 帧率归一化 + 帧率估计 | `t_hdr_framerate.c` | `28 项` |
 | CPU/GPU 同口径 | `t_hdr_gpu_mirror.c` | `14 项` |
 | 上屏接线（纸白/head/帧率） | `t_hdr_wiring.c` | `49 项` |
-| 淡出/黑场/淡入 | `t_hdr_fade.c` | `20 项` |
+| 淡出/黑场/淡入 | `t_hdr_fade.c` | `22 项` |
 | BT.2408 放置方式 | `t_hdr_bt2408.c` | `16 项` |
 | 画幅与黑边 | `t_hdr_letterbox.c` | `22 项` |
 | GPU/CPU 分箱对账 | `t_hdr_bin_mirror.c` | `21 项` |
 | L0 分位对账 | `t_hdr_knee_mirror.c` | `13 项` |
-| 上屏 shader 对账 | `t_hdr_shader_mirror.c` | `13 项` |
+| 上屏 shader 对账 | `t_hdr_shader_mirror.c` | `17 项` |
 | 运行期 headroom | `t_hdr_head.c` | `17 项` |
-| 回读控制流 | `t_hdr_tick.c` | `15 项` |
+| 回读控制流 | `t_hdr_tick.c` | `17 项` |
 
 ## 内存与未定义行为（`0e7/5`，31 套 × ASan+UBSan）
 
@@ -203,7 +203,7 @@ T3 必须失败），避免判据只会点头。
 因为报告可能在 halt 生效之前就打印出来。本机 `cc` 不支持 `-fsanitize` 时脚本打印一行跳过、
 **不算失败**（不让工具链差异变成红）。
 
-实测：31 套 906 项在 `-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer` 下全过，
+实测：31 套 912 项在 `-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer` 下全过，
 无一次 sanitizer 报告。
 
 ## 交付包（消费者视角）
@@ -251,7 +251,7 @@ T3 必须失败），避免判据只会点头。
 | `0y/5` | `report_review.py --check` | `docs/REVIEW.md` 的文件清单与行数与补丁现算一致 | 审阅意见本身的质量 |
 | `0z/5` | `report_fidelity.py --check` | 真实照片上纸白以下**逐位不动** | 纸白以上该怎么亮 |
 | `0w2/5` | `report_options.py --check` | `docs/OPTIONS.md` 的每个开关与源码里的常数/缺省值一致 | 开关在真机上的实际效果 |
-| `0w3/5` | `check_counts.py` | 文档里的「31 套 / 906 项 / 3555 B」与实测一致 | — |
+| `0w3/5` | `check_counts.py` | 文档里的「31 套 / 912 项 / 3670 B」与实测一致 | — |
 | `0w4/5` | `t_hdr_fuzz` | 12 条性质 × 20 万次随机直方图判定（单调、钳位、纸白不动、增益有界…） | 真实内容的分布 |
 | `0w5/5` | `t_hdr_oracle` | 白点/重心与**独立重写的参考实现**（照头文件注释里的定义，不引生产辅助函数）逐位对账：4000 组随机直方图 × 6 类对账 + 3 张真实照片，实测 24043 次比较零差异 | 参考实现自己也错的情况（但它与生产实现不同源，且故意写「最笨的版本」） |
 | `0w6/5` | `t_hdr_identity` | 全关态逐位一致：穷举 256 个码值 × 5 条路径（关 HDR 时输出必须与不打补丁完全相同） | 开着 HDR 时的性质 |
