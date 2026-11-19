@@ -1,0 +1,139 @@
+# 这个 workflow 属于 hdr-auto 包本身：clone 上游干净树 → 跑本地全部闸门 → 再用 Apple
+# 工具链真编 MSL、核常数、clang 语法检查 ObjC（这些本机 Ubuntu 做不到）。
+#
+# ⚠ 为什么只有 workflow_dispatch（手动）：
+#   2026-11-17 之前的 GitHub 号 Kippythisway 因为 push 触发 + 并发无上限，一天之内起了
+#   114 台 macOS 虚机（每台按分钟计费），账号被停用。所以本文件**不接受** push /
+#   pull_request / schedule 触发 —— 只有人点按钮才跑，且 concurrency 保证同一 ref 只跑一个。
+#   scripts/check_workflow_guard.py 把这两条变成闸门：改回 push 触发会让 run_all.sh 变红。
+name: verify
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: '为什么现在要跑（留一行给审计）'
+        required: false
+        default: 'gates'
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: macos-26      # 要 xcrun metal + Xcode 26 SDK（上游基线含 Metal 4 / MetalFX FI 头）
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: "取上游干净树（sparse: graphics runtime tools compat ios）"
+        run: |
+          set -e
+          rm -rf /tmp/s2a
+          git clone --filter=blob:none --no-checkout https://github.com/jhaizhou-ops/S2Arm.git /tmp/s2a
+          cd /tmp/s2a
+          git sparse-checkout init --cone
+          # 基线迁移后 SCOPE 含 ios（上游删掉下区倒影后，补丁已不碰 ios，但树要完整才能对账）
+          git sparse-checkout set graphics runtime tools compat ios
+          # 基线必须与 patch/BASELINE 第一列一致，否则打补丁会失败。这里**故意写死**：
+          # 改基线要同时改这一行，scripts/check_workflow_guard.py 会核对两者相等。
+          git fetch --depth 1 origin d5cbf7ff53f75b6132b17ce3a442d431bbbc8726
+          git checkout FETCH_HEAD
+          echo "· 上游树就绪：$(git rev-parse HEAD)"
+
+      - name: 本地全部闸门（run_all 在干净树上打补丁跑单测；结束后树是打过补丁的）
+        run: |
+          set -e
+          [ -f run_all.sh ] || cd hdr-auto        # 仓库根可能是 ios-build（含 hdr-auto/），也可能是包本身
+          python3 -c 'import yaml, PIL' 2>/dev/null || python3 -m pip install -q pyyaml pillow
+          python3 -c 'import hashlib; print("· patch sha256", hashlib.sha256(open("patch/hdr-auto-l1.patch","rb").read()).hexdigest())'
+          mkdir -p build
+          cc -O2 -I src tools/hdr_ref.c -lm -o build/hdr_ref
+          ./run_all.sh /tmp/s2a
+
+      # 这一步原来是「重新打补丁」，注释说「闸门跑完树是干净的」——那句话是错的：
+      # run_all.sh 的 4/5 走 ./verify.sh，而 verify.sh 打完补丁**不撤销**（它自己在注释里
+      # 就说「不幂等（它会 git apply）」）。所以上一跑完 /tmp/s2a 已经是打过补丁的树，
+      # 再 apply 必然 15 个 `已经存在于工作区中`。这处只有真跑一次才会现形，
+      # 是本 workflow 的第 5 个必红错（前 4 个都靠读代码 + shellcheck 找出来）。
+      # 改成断言：补丁确实在树上。将来 run_all 若真改成收尾撤销，这里会立刻报。
+      - name: 断言补丁确实在树上（MSL/ObjC 检查需要打完补丁的源码）
+        run: |
+          set -e
+          [ -f run_all.sh ] || cd hdr-auto
+          n=$(git -C /tmp/s2a status --porcelain | wc -l)
+          echo "· /tmp/s2a 上有 $n 处改动"
+          if [ "$n" -lt 40 ]; then
+            echo "::error::/tmp/s2a 上没看到打完的补丁（$n 处改动，预期 ≥40）—— run_all 的 4/5 行为变了？"
+            exit 1
+          fi
+
+      - name: MSL 真编译 + 常数对账 + ObjC 语法（Apple 工具链）
+        run: |
+          set -e
+          [ -f run_all.sh ] || cd hdr-auto
+          SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
+          MACSDK="$(xcrun --sdk macosx --show-sdk-path)"
+          # 1) 从打完补丁的树抽取 MSL（含 hdr_hist.metal 与补帧两段），全部真编成 .air
+          python3 scripts/extract_msl.py /tmp/s2a/graphics/nvn/gfx/nvn/nvn_mtl.m --dir /tmp/msl
+          python3 - <<'PY'
+          import codecs, os, re
+          inc = "/tmp/s2a/graphics/nvn/gfx/nvn/nvn_present_fi.inc"
+          lits = re.compile(r'"((?:[^"\\]|\\.)*)"')
+          cur, out = None, []
+          for ln in open(inc, encoding="utf-8", errors="replace"):
+              if "static const char *msl =" in ln:
+                  cur = []; out.append(cur); continue
+              if cur is None: continue
+              for m in lits.finditer(ln): cur.append(codecs.decode(m.group(1), "unicode_escape"))
+              if ln.rstrip().endswith(";") and cur: cur = None
+          for i, chunk in enumerate(out, 1):
+              open(f"/tmp/msl/fi_msl_{i}.metal", "w", encoding="utf-8").write("".join(chunk))
+          PY
+          cp /tmp/s2a/graphics/nvn/shaders/hdr_hist.metal /tmp/msl/hdr_hist.metal
+          for f in /tmp/msl/*.metal; do
+            xcrun -sdk iphoneos metal -std=metal3.0 -Wall -c "$f" -o "${f%.metal}.air"
+            echo "· 编译通过：$(basename "$f") $(wc -c < "$f" | tr -d ' ') B"
+          done
+          # 2) 常数一致（CPU 头文件 ↔ MSL）
+          python3 scripts/check_constants.py /tmp/s2a/graphics/nvn/gfx/nvn/nvn_hdr.h /tmp/msl/src_msl_hdr.metal /tmp/msl/hdr_hist.metal
+          # 3) 生成嵌入头到 /tmp/hdr_gen（不污染上游树、符合 workflow 守卫第 10 条）
+          mkdir -p /tmp/hdr_gen
+          python3 /tmp/s2a/graphics/metal/tools/embed_msl.py /tmp/s2a/graphics/nvn/shaders/hdr_hist.metal k_hdr_hist /tmp/hdr_gen/nvn_hdr_hist_msl.h
+          python3 /tmp/s2a/graphics/metal/tools/embed_msl.py /tmp/s2a/graphics/metal/gal_tess_d3d.h k_nvn_tess_core /tmp/hdr_gen/gal_tess_msl.h
+          for n in edge blend neighbour; do
+            python3 /tmp/s2a/graphics/metal/tools/embed_msl.py "/tmp/s2a/graphics/metal/shaders/aa_${n}.metal" "k_aa_${n}" "/tmp/hdr_gen/nvn_aa_${n}.h"
+          done
+          python3 /tmp/s2a/graphics/metal/tools/embed_aa_lut.py /tmp/s2a/compat/tree/src/Ryujinx.Graphics.Vulkan/Effects/Textures /tmp/hdr_gen/nvn_aa_lut.h
+          # 4) ObjC 语法（iOS SDK + macOS SDK，防止 #if TARGET_OS_IPHONE 漏声明导致一侧编不过）
+          for src in graphics/nvn/gfx/nvn/nvn_mtl.m graphics/nvn/host_adapt.m; do
+            log="/tmp/objc_$(basename "$src").log"
+            : > "$log"
+            clang -fsyntax-only -std=gnu11 -fobjc-arc -arch arm64 -isysroot "$SDK" \
+              -mios-version-min=18.0 -Wno-everything \
+              -I/tmp/s2a/graphics -I/tmp/s2a/graphics/nvn -I/tmp/s2a/graphics/nvn/gfx/nvn/include \
+              -I/tmp/s2a/graphics/nvn/host -I/tmp/s2a/runtime/include -I/tmp/s2a/runtime/src \
+              -I/tmp/s2a/graphics/nvn/third_party/vulkan-headers/include -I/tmp/hdr_gen \
+              "/tmp/s2a/$src" 2>&1 | tee "$log"
+            if grep -E ': (fatal )?error:' "$log"; then
+              echo "::error::iOS ObjC 语法检查发现错误：$src（见上方 clang 输出）"
+              exit 1
+            fi
+            maclog="/tmp/objc_mac_$(basename "$src").log"
+            : > "$maclog"
+            clang -fsyntax-only -std=gnu11 -fobjc-arc -arch arm64 -isysroot "$MACSDK" \
+              -mmacosx-version-min=15.0 -Wno-everything \
+              -I/tmp/s2a/graphics -I/tmp/s2a/graphics/nvn -I/tmp/s2a/graphics/nvn/gfx/nvn/include \
+              -I/tmp/s2a/graphics/nvn/host -I/tmp/s2a/runtime/include -I/tmp/s2a/runtime/src \
+              -I/tmp/s2a/graphics/nvn/third_party/vulkan-headers/include -I/tmp/hdr_gen \
+              "/tmp/s2a/$src" 2>&1 | tee "$maclog"
+            if grep -E ': (fatal )?error:' "$maclog"; then
+              echo "::error::macOS ObjC 语法检查发现错误：$src（见上方 clang 输出）"
+              exit 1
+            fi
+            echo "· 语法通过：$src"
+          done
