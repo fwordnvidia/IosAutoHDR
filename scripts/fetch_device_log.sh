@@ -30,7 +30,7 @@ if [ -z "$BUNDLE" ]; then
     exit 2
 fi
 if [ ! -d "$IOSKIT" ]; then
-    echo "✗ 找不到 $IOSKIT（ios-kit 没装？这里应该有 ifuse / ios）"
+    echo "✗ 找不到 ${IOSKIT}（ios-kit 没装？这里应该有 ifuse / ios）"
     exit 1
 fi
 
@@ -41,7 +41,7 @@ if [ -x "$IOSKIT/ifuse" ]; then
         if [ -f "$MNT/host.log" ]; then
             cp "$MNT/host.log" "$OUT" || { echo "✗ 复制失败：$MNT/host.log → $OUT"; fusermount -u "$MNT" 2>/dev/null; exit 1; }
             fusermount -u "$MNT" 2>/dev/null || umount "$MNT" 2>/dev/null
-            echo "✓ 已用 ifuse 拉到 $OUT（$(wc -c < "$OUT") B，$(grep -c 'HDR stat' "$OUT" 2>/dev/null || echo 0) 行 HDR stat）"
+            echo "✓ 已用 ifuse 拉到 ${OUT}（$(wc -c < "$OUT") B，$(grep -c 'HDR stat' "$OUT" 2>/dev/null || echo 0) 行 HDR stat）"
             echo "  下一步：./scripts/check_device_log.py --log $OUT --expect t2"
             exit 0
         fi
@@ -66,7 +66,7 @@ if [ -x "$IOSKIT/ios" ]; then
             if "$IOSKIT/ios" file pull --app="$BUNDLE" --remote=/Documents/host.log --local="$OUT" \
                     --nojson --tunnel-info-port=28100 2>"$WORK/pull.err"; then
                 pkill -f '[t]unnel start' 2>/dev/null
-                echo "✓ 已用 file pull 拉到 $OUT（$(wc -c < "$OUT") B）"
+                echo "✓ 已用 file pull 拉到 ${OUT}（$(wc -c < "$OUT") B）"
                 echo "  下一步：./scripts/check_device_log.py --log $OUT --expect t2"
                 exit 0
             fi

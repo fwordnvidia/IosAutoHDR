@@ -95,9 +95,13 @@ def main():
                 bad += 1
             if float(r[10]) > 0:
                 bad += 1
-            lines.append("| %s | %.3f | %.4f | %.4f | %.4f | %+.2f | %.5f | %.1e |"
+            # 色相偏差原值是 libm/FMA 末位浮点误差（Linux glibc 1.6e-09 vs macOS arm64 FMA），
+            # 低于 1e-6 统一写 "< 1e-6" 避免文档绑死平台（同 report_curveref.py 口径）
+            hue_val = float(r[11])
+            hue_str = "< 1e-6" if abs(hue_val) < 1e-6 else ("%.1e" % hue_val)
+            lines.append("| %s | %.3f | %.4f | %.4f | %.4f | %+.2f | %.5f | %s |"
                          % (name, float(r[3]), float(r[4]), float(r[5]), float(r[8]),
-                            float(r[7]), float(r[10]), float(r[11])))
+                            float(r[7]), float(r[10]), hue_str))
         lines += ["",
                   "两列的判据都通过：%s（不误伤：白点两列逐位相同；不越界：越界像素 0）"
                   % ("是" if bad == 0 else "**否**"),

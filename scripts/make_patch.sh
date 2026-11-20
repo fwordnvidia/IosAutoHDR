@@ -72,7 +72,7 @@ for f in src/*; do
                     continue            # a) 上游原版
                 fi
             fi
-            echo "⚠ $b：src 未变，树里既不是上游版本也不是 src 版本（树 $(wc -c <"$dst") B vs src $(wc -c <"$f") B）⇒ 树里被手改过"
+            echo "⚠ ${b}：src 未变，树里既不是上游版本也不是 src 版本（树 $(wc -c <"$dst") B vs src $(wc -c <"$f") B）⇒ 树里被手改过"
             drift=1
         fi
     elif [ -n "$was" ]; then
@@ -116,4 +116,4 @@ if ! check_coverage; then
     echo "✗ 覆盖检查失败：补丁里有文件没有 src/ 来源（见上）"
     exit 1
 fi
-echo "✓ 自检通过：src_msl_hdr.metal $SIZE B，常数一致（指纹已写入 $MANIFEST）"
+echo "✓ 自检通过：src_msl_hdr.metal $SIZE B，常数一致（指纹已写入 ${MANIFEST}）"

@@ -102,7 +102,7 @@ say "8) 根级入口脚本存在（README 的接收步骤要真能照做）"
 # run_all.sh / verify.sh，而 README 让使用者第一步就敲 `./run_all.sh <树>`。tar 包里有，
 # 只 clone 投影的人第一步就 command not found —— 而此前 7 组自检全绿。
 for f in run_all.sh verify.sh; do
-    if [ -f "$f" ] && [ -x "$f" ]; then ok "$f 存在且可执行"; else bad "缺 $f（README 让使用者敲它，投影里却没有）"; fi
+    if [ -f "$f" ] && [ -x "$f" ]; then ok "$f 存在且可执行"; else bad "缺 ${f}（README 让使用者敲它，投影里却没有）"; fi
 done
 
 say "9) 投影里的 CI 只手动跑（在 github.com 上按一下就是一台 macOS 虚机）"
@@ -139,7 +139,7 @@ else
         if [ "$a" = "$b" ]; then ok "补丁与源码仓逐字节一致（sha256 ${a%??????????????????????????????????????????????????????}…）"
         else bad "投影里的补丁与源码仓不同（投影 ${a}… / 源码 ${b}…）—— 忘了 sync 还是换行被改？"; fi
     else
-        ok "本机没有源码仓（$SRC）—— 跳过逐字节比对"
+        ok "本机没有源码仓（${SRC}）—— 跳过逐字节比对"
     fi
 fi
 

@@ -164,14 +164,14 @@ SW03=$(awk -F, '$1=="0.30"{print $2}' build/scene_resp.csv)
 SW15=$(awk -F, '$1=="1.50"{print $2}' build/scene_resp.csv)
 LAG01=$(awk -F, '$1=="0.10"{print $2}' build/scene_lag.csv)
 LAGHI=$(awk -F, '$1=="1.00"{print $4}' build/scene_lag.csv)
-near "$SW03" 0.000 0.001 && ok "0.30 stop/帧 不算切镜（sw=$SW03）" || bad "sw(0.30)" "$SW03"
-near "$SW15" 1.000 0.01 && ok "1.50 stop/帧 全速（sw=$SW15）" || bad "sw(1.50)" "$SW15"
+near "$SW03" 0.000 0.001 && ok "0.30 stop/帧 不算切镜（sw=${SW03}）" || bad "sw(0.30)" "$SW03"
+near "$SW15" 1.000 0.01 && ok "1.50 stop/帧 全速（sw=${SW15}）" || bad "sw(1.50)" "$SW15"
 SW066=$(./build/sweep_scene --at 0.66)
 SW066W=${SW066%,*}; SW066N=${SW066#*,}
 near "$SW066W" 0.311 0.02 && ok "0.66 stop/帧 的中等切镜拿到 ${SW066W} 权重（旧 0.5/1.6 只有 0.055）" || bad "sw(0.66)" "$SW066W"
 [ "$SW066N" -le 12 ] && ok "中等切镜 ${SW066N} 帧到 95%（≤12 为过）" || bad "frames(0.66)" "$SW066N"
-near "$LAG01" 0.662 0.02 && ok "0.10 stop/帧 的稳态落后 0.66 stop（实测 $LAG01）" || bad "lag(0.10)" "$LAG01"
-near "$LAGHI" 1.964 0.05 && ok "阈值抬到 1.0 后快镜头落后 1.96 stop（所以不能抬，实测 $LAGHI）" || bad "lag_hi(1.0)" "$LAGHI"
+near "$LAG01" 0.662 0.02 && ok "0.10 stop/帧 的稳态落后 0.66 stop（实测 ${LAG01}）" || bad "lag(0.10)" "$LAG01"
+near "$LAGHI" 1.964 0.05 && ok "阈值抬到 1.0 后快镜头落后 1.96 stop（所以不能抬，实测 ${LAGHI}）" || bad "lag_hi(1.0)" "$LAGHI"
 echo "  ✓ 阈值平台：0.1 stop/帧 以下任何 LOW 都一样（实测全 0 权重）；LOW 抬到 1.0 则 1.0 stop/帧 落后 1.96 stop"
 
 echo "=== 场景十四：同 APL 切镜（白点判据把 26 帧斜坡压成 1 帧）"
@@ -186,7 +186,7 @@ echo "=== 场景十五：星空（float4 代理不可能判对的那类画面）
 SL=$(awk -F, 'END{print $3}' /tmp/star.csv)
 SW=$(awk -F, 'END{print $2}' /tmp/star.csv)
 SLIT=$(awk -F, 'END{print $5}' /tmp/star.csv)
-near "$SL" 0.02 0.002 && ok "星空：纸白从近黑起（knee_lo=$SL，白点 $SW 是亮星，不是纸白）" || bad "knee_lo" "$SL"
+near "$SL" 0.02 0.002 && ok "星空：纸白从近黑起（knee_lo=${SL}，白点 $SW 是亮星，不是纸白）" || bad "knee_lo" "$SL"
 awk -v v="$SLIT" 'BEGIN{exit !(v<0.05)}' && ok "星空：lit=$SLIT < 5%（真直方图才看得出的量）" || bad "lit" "$SLIT"
 awk -v v="$SW" 'BEGIN{exit !(v>0.4)}' && ok "星空：白点 $SW > 0.4（所以 float4 代理必把它当亮场）" || bad "white" "$SW"
 
@@ -204,7 +204,7 @@ klo=$(printf '%s' "$L1" | sed -n 's/.*knee=\([0-9.]*\)+\([0-9.]*\).*/\1/p')
 kdl=$(printf '%s' "$L1" | sed -n 's/.*knee=\([0-9.]*\)+\([0-9.]*\).*/\2/p')
 khi=$(printf '%s' "$S1" | sed -n 's/.*knee=[0-9.]*\.\.\([0-9.]*\).*/\1/p')
 awk -v a="$klo" -v b="$kdl" -v c="$khi" 'BEGIN{exit !((a+b)-c < 0.0002 && c-(a+b) < 0.0002)}' \
-  && ok "knee 的两种表示一致（$klo+$kdl = $khi）" || bad "knee 表示不一致" "$klo+$kdl vs $khi"
+  && ok "knee 的两种表示一致（$klo+$kdl = ${khi}）" || bad "knee 表示不一致" "$klo+$kdl vs $khi"
 # HUD 剔除开着时白点应显著上抬，诊断行必须跟着变（否则日志不是真的取自当前帧）
 # map 字段：缺省必须打 map=0，S2A_HDR_MAP=1 时必须打 map=1 且 knee 仍在（只是不参与上屏）
 case "$L1" in
@@ -224,7 +224,7 @@ KL1=$(printf '%s' "$L1" | sed -n 's/.*knee=\([0-9.]*\)+\([0-9.]*\).*/\1+\2/p')
 W1=$(printf '%s' "$L1" | sed -n 's/.*white=\([0-9.]*\).*/\1/p')
 W2=$(grep -m1 '^HDR stat: ' /tmp/st_hud.txt | sed -n 's/.*white=\([0-9.]*\).*/\1/p')
 awk -v a="$W1" -v b="$W2" 'BEGIN{exit !(a-b > 0.2)}' \
-  && ok "同一帧加 --hudguard 后 white $W1→$W2，诊断行跟随" || bad "诊断行没跟随当前帧" "$W1 vs $W2"
+  && ok "同一帧加 --hudguard 后 white ${W1}→${W2}，诊断行跟随" || bad "诊断行没跟随当前帧" "$W1 vs $W2"
 
 if [ "$fail" -eq 0 ]; then 
 # ---- BT.2408 放置方式（--map bt2408）：黑必须仍是 0、纸白必须正好 head ----

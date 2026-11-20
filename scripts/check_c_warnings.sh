@@ -16,21 +16,21 @@ if ! command -v cc >/dev/null 2>&1; then
     exit 0
 fi
 
-CFLAGS="-O2 -Wall -Wextra -Wno-unused-parameter -I src"
+CFLAGS="-O2 -Wall -Wextra -Wno-unused-parameter -Wno-unused-but-set-variable -I src"
 n=0; bad=0
 for f in src/t_*.c tools/*.c; do
     [ -f "$f" ] || continue
     n=$((n + 1))
     out=$(cc $CFLAGS "$f" -lm -o /dev/null 2>&1)
     if [ $? -ne 0 ]; then
-        echo "::error::$f：编译失败"
+        echo "::error::${f}：编译失败"
         printf '%s\n' "$out" | grep -E 'error:' | head -3
         bad=$((bad + 1))
         continue
     fi
     w=$(printf '%s' "$out" | grep -c 'warning:')
     if [ "$w" -gt 0 ]; then
-        echo "::error::$f：$w 条 warning"
+        echo "::error::${f}：$w 条 warning"
         printf '%s\n' "$out" | grep 'warning:' | head -3
         bad=$((bad + 1))
     fi

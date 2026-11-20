@@ -134,7 +134,7 @@ else
         -X POST -H "Authorization: token $TOKEN" -H "Accept: application/vnd.github+json" \
         "https://api.github.com/repos/$REPO/actions/workflows/verify.yml/dispatches" -d "$BODY")
 fi
-[ "$CODE" = "204" ] || die "dispatch 返回 $CODE（403 = token 缺 Workflows: Read and write；响应：$(head -c 200 "$WORK/dispatch_resp.json")）"
+[ "$CODE" = "204" ] || die "dispatch 返回 ${CODE}（403 = token 缺 Workflows: Read and write；响应：$(head -c 200 "$WORK/dispatch_resp.json")）"
 say "已触发（204）"
 
 echo "=== 4) 等待运行 ==="

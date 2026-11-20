@@ -27,7 +27,7 @@ esac
 dir=$(mktemp -d)
 trap 'rm -rf "$dir"' EXIT INT TERM
 echo "· 模式：$MODE    提交：$sha"
-[ "$sha" = "$BASE" ] || echo "· 基线是 $BASE（本补丁就是对它验证的）"
+[ "$sha" = "$BASE" ] || echo "· 基线是 ${BASE}（本补丁就是对它验证的）"
 
 git clone -q --filter=blob:none --no-checkout "$UP" "$dir/t"
 git -C "$dir/t" sparse-checkout init --cone >/dev/null 2>&1 || true

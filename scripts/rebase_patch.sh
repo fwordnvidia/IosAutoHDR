@@ -99,7 +99,7 @@ if ! patch -p1 --forward --no-backup-if-mismatch -i "$ROOT/$PATCH" >/tmp/rebase_
     # 下一次 `--check` 或人肉 grep 会把半套补丁当成上游代码（本轮就误判过 present_blit 已有 hdr_head_tick）。
     if [ -z "$pre_dirty" ]; then
         git reset -q --hard "$before" && git clean -qfd $SCOPE
-        echo "  · 已回退：树复原到 $before（无 .rej、无半套补丁）"
+        echo "  · 已回退：树复原到 ${before}（无 .rej、无半套补丁）"
     else
         echo "  · 树在本次运行前就有未提交改动，未自动回退；请手动 git checkout -- <冲突文件> 后再查"
     fi

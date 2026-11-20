@@ -55,4 +55,4 @@ else
 fi
 
 echo
-echo "✓ 消费者测试通过：解包即用（$TARBALL）"
+echo "✓ 消费者测试通过：解包即用（${TARBALL}）"
