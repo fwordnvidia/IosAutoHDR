@@ -1,0 +1,191 @@
+name: build-ipa
+
+# 仅手动触发的整包 iOS .ipa 构建（用于真机三格矩阵验收）。
+# 严禁添加 push / pull_request / schedule / matrix 触发器。
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: '本次出包用途（审计记录）'
+        required: false
+        default: 'device-test-64ba1861c'
+
+concurrency:
+  group: build-ipa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-ipa:
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - name: Checkout hdr-auto
+        uses: actions/checkout@v4
+
+      - name: Cache brew + nuget
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/Homebrew
+            ~/.nuget/packages
+          key: s2a-ipa-${{ runner.os }}-${{ hashFiles('patch/BASELINE', 'patch/hdr-auto-l1.patch') }}
+          restore-keys: s2a-ipa-${{ runner.os }}-
+
+      - name: Clone upstream S2Arm and apply Auto-HDR patch
+        run: |
+          set -euo pipefail
+          BASE=$(awk '!/^#/ && NF { print $1; exit }' patch/BASELINE)
+          echo "· 目标上游基线：$BASE"
+          echo "· 补丁 SHA256：$(shasum -a 256 patch/hdr-auto-l1.patch | awk '{print $1}')"
+          rm -rf /private/tmp/s2a
+          git clone --filter=blob:none --no-checkout https://github.com/jhaizhou-ops/S2Arm.git /private/tmp/s2a
+          cd /private/tmp/s2a
+          git fetch --depth 1 origin "$BASE"
+          git checkout FETCH_HEAD
+          git apply "$GITHUB_WORKSPACE/patch/hdr-auto-l1.patch"
+          git -c user.name="hdr-auto-ci" -c user.email="ci@hdr-auto.local" add -A
+          git -c user.name="hdr-auto-ci" -c user.email="ci@hdr-auto.local" commit -q -m "apply hdr-auto-l1.patch"
+          echo "· 已在 $(git rev-parse HEAD) 上干净打好补丁"
+
+      - name: Probe Xcode and MetalToolchain
+        run: |
+          set -euo pipefail
+          ls -1d /Applications/Xcode*.app || true
+          xcode-select -p
+          xcodebuild -version
+          echo "iOS SDK: $(xcrun --sdk iphoneos --show-sdk-version)"
+          if ! xcrun -sdk iphoneos metal --version >/dev/null 2>&1; then
+            echo "--- downloading MetalToolchain ---"
+            xcodebuild -downloadComponent MetalToolchain
+            sleep 10
+            xcrun -sdk iphoneos metal --version || { xcodebuild -runFirstLaunch || true; sleep 15; xcrun -sdk iphoneos metal --version; }
+          fi
+          xcrun -sdk iphoneos metal --version
+
+      - name: Install build tools (.NET 10 + iOS workload + brew tools)
+        run: |
+          set -euo pipefail
+          export HOMEBREW_NO_AUTO_UPDATE=1
+          MISSING=""
+          for pair in "gmake:make" "ninja:ninja" "cmake:cmake" "rg:ripgrep" "jq:jq" "meson:meson" "nasm:nasm" "yasm:yasm"; do
+            cmd=${pair%%:*}
+            pkg=${pair##*:}
+            command -v "$cmd" >/dev/null 2>&1 || MISSING="$MISSING $pkg"
+          done
+          if [ -n "$MISSING" ]; then
+            echo "installing:$MISSING"
+            brew install $MISSING
+          fi
+          python3 -c 'import PIL' 2>/dev/null || python3 -m pip install --quiet pillow || python3 -m pip install --quiet --break-system-packages pillow || true
+
+          probe_dotnet() {
+            for d in "$HOME/.dotnet" /usr/local/share/dotnet /opt/homebrew/opt/dotnet/libexec /opt/homebrew/share/dotnet; do
+              if [ -x "$d/dotnet" ]; then echo "$d"; return 0; fi
+            done
+            return 1
+          }
+          FOUND=$(probe_dotnet || true)
+          if [ -z "$FOUND" ] || ! "$FOUND/dotnet" --list-sdks 2>/dev/null | grep -q '^10\.'; then
+            echo "installing official .NET 10 SDK into $HOME/.dotnet"
+            curl -fsSL --retry 3 --retry-delay 3 https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+            bash /tmp/dotnet-install.sh --channel 10.0 --install-dir "$HOME/.dotnet"
+            FOUND="$HOME/.dotnet"
+          fi
+          export DOTNET_ROOT="$FOUND"
+          export PATH="$FOUND:$PATH"
+          echo "DOTNET_ROOT=$DOTNET_ROOT"
+          dotnet --version
+          if ! dotnet workload list 2>/dev/null | grep -qiE '(^|[[:space:]])ios([[:space:]]|$)'; then
+            if [ -w "$DOTNET_ROOT" ]; then
+              dotnet workload install ios --skip-sign-check
+            else
+              sudo -n "$DOTNET_ROOT/dotnet" workload install ios --skip-sign-check || dotnet workload install ios --skip-sign-check
+            fi
+          fi
+          dotnet workload list
+
+      - name: Build S2Arm iOS shell (S2A_CS=1 S2A_SHELLUI=1)
+        run: |
+          set -euo pipefail
+          cd /private/tmp/s2a
+          for d in "$HOME/.dotnet" /usr/local/share/dotnet /opt/homebrew/opt/dotnet/libexec; do
+            if [ -x "$d/dotnet" ]; then export DOTNET_ROOT="$d"; export DOTNET="$d/dotnet"; break; fi
+          done
+          export PATH="${DOTNET_ROOT:-$HOME/.dotnet}:$(brew --prefix make)/libexec/gnubin:$PATH"
+          export DOTNET_CLI_TELEMETRY_OPTOUT=1
+          export DOTNET_NOLOGO=1
+          source tools/toolchain.sh
+          source tools/cores.sh
+          s2a_cores
+          source tools/nospace.sh
+          RN=$(s2a_nospace "$PWD")
+          source tools/gmake.sh
+          MK=$(s2a_gmake)
+          echo "RN=$RN  MK=$MK  JOBS=${S2A_JOBS:-4}"
+          "$MK" -C "$RN" ROOT="$RN" -j"${S2A_JOBS:-4}" ios \
+            S2A_CS=1 S2A_SHELLUI=1 IOS_BUNDLE=dev.s2arm.shell IOS_DISPLAY=S2Arm 2>&1 | tee /tmp/s2a-build.log
+          APP=build/ios/S2Arm.app
+          [ -d "$APP" ] || { echo "::error::build/ios/S2Arm.app missing"; exit 1; }
+          HL=build/gal/ios/gal_helpers
+          if [ ! -f "$HL/.stamp" ]; then
+            "$MK" -C "$RN" ROOT="$RN" "$RN/$HL/.stamp"
+          fi
+          mkdir -p "$APP/gal_helpers/m3"
+          cp "$HL"/*.metallib "$APP/gal_helpers/"
+          cp "$HL"/m3/*.metallib "$APP/gal_helpers/m3/"
+
+      - name: Finalize icons, Info.plist, symbol check, and package IPA
+        run: |
+          set -euo pipefail
+          cd /private/tmp/s2a
+          APP=build/ios/S2Arm.app
+          ICON=launchers/macos/Branding/AppIcon-iOS.png
+          [ -f "$ICON" ] || ICON=launchers/macos/Branding/AppIcon-1024.png
+          python3 pack/app_bundle.py write_icons "$ICON" "$APP" || echo "WARN: write_icons failed"
+          /usr/bin/plutil -replace UIFileSharingEnabled -bool YES "$APP/Info.plist"
+          /usr/bin/plutil -replace LSSupportsOpeningDocumentsInPlace -bool YES "$APP/Info.plist"
+          SID=$(python3 -c "from pack.shell.manifest import current_id; print(current_id())" 2>/dev/null || true)
+          if [ -n "$SID" ]; then
+            python3 pack/app_bundle.py update_metadata "$APP" \
+              --set "S2AShellId=$SID" \
+              --set "S2ADisplayVersion=hdr-auto-64ba1861" || true
+          fi
+          echo "=== Verify HDR symbols linked into S2Arm ==="
+          nm "$APP/S2Arm" > /tmp/s2a.nm 2>/dev/null || true
+          grep -E 'g_hdr_knee|hdr_head_tick|s2a_out_layer_hdr|hdr_hist_tick' /tmp/s2a.nm | head -n 20 || true
+          grep -q 'g_hdr_knee' /tmp/s2a.nm || { echo "::error::g_hdr_knee not found in linked S2Arm binary"; exit 1; }
+          echo "=== Info.plist check ==="
+          /usr/bin/plutil -p "$APP/Info.plist" > /tmp/s2a.plist
+          grep -E 'CFBundleIdentifier|UIFileSharingEnabled|S2AShellId|S2ACommit|UIApplicationSceneManifest' /tmp/s2a.plist || true
+
+          mkdir -p "$GITHUB_WORKSPACE/out"
+          ditto -c -k --sequesterRsrc --keepParent "$APP" "$GITHUB_WORKSPACE/out/S2Arm.app.zip"
+
+          # Free Apple ID sideload-friendly IPA (strip PlugIns widget extension to avoid extra App ID quota)
+          STAGE=/tmp/ipa-stage
+          rm -rf "$STAGE" && mkdir -p "$STAGE/Payload"
+          cp -R "$APP" "$STAGE/Payload/S2Arm.app"
+          rm -rf "$STAGE/Payload/S2Arm.app/PlugIns"
+          (cd "$STAGE" && zip -qry "$GITHUB_WORKSPACE/out/S2Arm-hdr-auto-64ba1861.ipa" Payload)
+          ls -lh "$GITHUB_WORKSPACE/out/"
+          shasum -a 256 "$GITHUB_WORKSPACE/out/"* | tee "$GITHUB_WORKSPACE/out/SHA256SUMS"
+
+      - name: Upload IPA and shell bundle artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: S2Arm-hdr-auto-64ba1861
+          path: out/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-ipa-failure-log
+          path: |
+            /tmp/s2a-build.log
+            /private/tmp/s2a/build/ios/shellui/xcodebuild.log
+            /private/tmp/s2a/build/cs/*.err
+          if-no-files-found: ignore
+          retention-days: 7
