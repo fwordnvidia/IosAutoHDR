@@ -41,7 +41,7 @@ jobs:
           git sparse-checkout set graphics runtime tools compat ios
           # 基线必须与 patch/BASELINE 第一列一致，否则打补丁会失败。这里**故意写死**：
           # 改基线要同时改这一行，scripts/check_workflow_guard.py 会核对两者相等。
-          git fetch --depth 1 origin d5cbf7ff53f75b6132b17ce3a442d431bbbc8726
+          git fetch --depth 1 origin 64ba1861cedebd244256c4bf8fa41340e8aa4a28
           git checkout FETCH_HEAD
           echo "· 上游树就绪：$(git rev-parse HEAD)"
 

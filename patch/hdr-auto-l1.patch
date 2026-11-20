@@ -1,5 +1,5 @@
 diff --git a/graphics/nvn/Makefile b/graphics/nvn/Makefile
-index 97f2dce9..f81f3817 100644
+index cad17d73..037d6482 100644
 --- a/graphics/nvn/Makefile
 +++ b/graphics/nvn/Makefile
 @@ -16,7 +16,7 @@ AA_MSLH := $(addprefix $(OUT)/gen/nvn_aa_,$(addsuffix .h,$(AA_NAMES)))
@@ -10,8 +10,8 @@ index 97f2dce9..f81f3817 100644
 +GENH  := $(OUT)/gen/gal_tess_msl.h $(OUT)/gen/nvn_hdr_hist_msl.h
  SRCS  := $(sort $(wildcard gfx/nvn/*.c gfx/nvn/*.m gfx/nvn/*.S gfx/tex/*.c gfx/tex/*.m gfx/vk/*.m gfx/gl/*.m)) host_adapt.m graphics_session.c   # gfx/vk：Vulkan 款（直连层 hle_vk.m，10-24 搬入）
  HDRS  := $(wildcard gfx/nvn/*.h gfx/nvn/*.inc gfx/nvn/include/*.h gfx/tex/*.h gfx/vk/*.h gfx/vk/*.inc gfx/gl/*.h host/*.h host/*.inc) graphics_session.h ../track/s2a_track.h texture_extent.inc widen_glue.inc widen_fallback.inc fe_stat.h lib_pack.inc lib_pack_core.inc $(ROOT)/graphics/widen/export/s2a_widen.h $(ROOT)/graphics/metal/fit_judge.h $(ROOT)/runtime/src/native.h $(ROOT)/runtime/include/s2a_gfx_mode.h $(AA_MSLH) $(AA_LUTH) $(GENH)
- # 源 / 头清单戳（11-05 合入运维线：门禁常驻工作树跨批增量编，某批分支删 / 改名一个源文件后，余下源都比库旧、库不重建，
-@@ -63,6 +63,9 @@ GLSLANG_RID ?= ios-arm64
+ # 本库源码 include 的运行时头文件也要进依赖：漏了改头文件不重编库，各编译单元对共用结构的理解前后不一（11-18 改 snapfmt.h 的结构，库里还是旧目标文件）
+@@ -65,6 +65,9 @@ GLSLANG_RID ?= ios-arm64
  mac: $(OUT)/mac/libnvn.a
  ios: $(OUT)/ios/libnvn.a
  
@@ -1746,10 +1746,10 @@ index 00000000..a001187a
 +
 +#endif
 diff --git a/graphics/nvn/gfx/nvn/nvn_mtl.m b/graphics/nvn/gfx/nvn/nvn_mtl.m
-index c32e6b01..89948435 100644
+index 8665a05f..aba6bf2a 100644
 --- a/graphics/nvn/gfx/nvn/nvn_mtl.m
 +++ b/graphics/nvn/gfx/nvn/nvn_mtl.m
-@@ -817,7 +817,7 @@ void mtl_init(void) {
+@@ -848,7 +848,7 @@ void mtl_init(void) {
          g_present_args = [g_dev newArgumentTableWithDescriptor:pad error:&ate];
          if (!g_present_args) MDIE("failed to create the present argument table: %s", ate.localizedDescription.UTF8String);
          for (int i = 0; i < 3; i++) {
@@ -1758,7 +1758,7 @@ index c32e6b01..89948435 100644
              if (!g_present_uv[i]) MDIE("failed to create present UV buffer[%d]", i);
              res_add(g_present_uv[i]);
          }
-@@ -17595,17 +17595,174 @@ static CAMetalLayer *g_present_layer_resident;
+@@ -18236,17 +18236,174 @@ static CAMetalLayer *g_present_layer_resident;
  #endif
  void mtl_present_test_stall(uint64_t ns) { g_present_stall_ns = ns; }
  #include "nvn_present_aa.inc"
@@ -1934,7 +1934,7 @@ index c32e6b01..89948435 100644
          if (!lib) MDIE("present shader compile failed %s", e.localizedDescription.UTF8String);
          MTLRenderPipelineDescriptor *pd = [MTLRenderPipelineDescriptor new];
          pd.vertexFunction = [lib newFunctionWithName:@"vs"]; pd.fragmentFunction = [lib newFunctionWithName:@"fs"];
-@@ -17616,6 +17773,7 @@ static void present_pipeline(MTLPixelFormat format) {
+@@ -18257,6 +18414,7 @@ static void present_pipeline(MTLPixelFormat format) {
          MTLSamplerDescriptor *sd = [MTLSamplerDescriptor new]; sd.minFilter = sd.magFilter = g_present_nearest ? MTLSamplerMinMagFilterNearest : MTLSamplerMinMagFilterLinear; sd.supportArgumentBuffers = YES;
          g_blit_samp = [g_dev newSamplerStateWithDescriptor:sd];
      }
@@ -1942,7 +1942,7 @@ index c32e6b01..89948435 100644
  }
  // Present samples only the valid source rectangle declared by NVN; kept separate from the raw swapchain readback screenshot. Edges are clamped to the texel centers of the valid area, so bilinear does not read the black texels outside.
  // Present samples the raw bytes stored in the swapchain texture (the Switch's scan-out sends the stored bytes as they are): an sRGB source is replaced by a non-sRGB view of the same storage,
-@@ -17636,6 +17794,7 @@ static id<MTLTexture> present_raw_src(id<MTLTexture> src) {
+@@ -18277,6 +18435,7 @@ static id<MTLTexture> present_raw_src(id<MTLTexture> src) {
  __attribute__((weak)) double s2a_cpatch_present_aspect(void) { return 0; }   // native runtime/src/cpatch.c: current aspect while an adaptive community widescreen patch is on; graphics unit tests without the host have none
  #include "nvn_present_fit.h"   // pf_crop_fit (present_now) / pf_viewport (both blits); plain C, tested by graphics/nvn/tests/t_present_fit.c
  static int present_blit(id<MTLCommandBuffer> cb, id<MTLTexture> src, id<MTLTexture> dst, const int crop[4], BOOL flip, int screen) {
@@ -1950,7 +1950,7 @@ index c32e6b01..89948435 100644
      NSUInteger cx = 0, cy = 0, cw = src.width, ch = src.height;
      if (crop && (crop[2] || crop[3])) {
          if (crop[0] < 0 || crop[1] < 0 || crop[2] <= 0 || crop[3] <= 0 ||
-@@ -17666,8 +17825,13 @@ static int present_blit(id<MTLCommandBuffer> cb, id<MTLTexture> src, id<MTLTextu
+@@ -18307,8 +18466,13 @@ static int present_blit(id<MTLCommandBuffer> cb, id<MTLTexture> src, id<MTLTextu
      id<MTLRenderCommandEncoder> en = [cb renderCommandEncoderWithDescriptor:rp];
      [en setViewport:vp];
      [en setRenderPipelineState:g_blit_pso]; [en setFragmentTexture:present_raw_src(src) atIndex:0]; [en setFragmentSamplerState:g_blit_samp atIndex:0];
@@ -1966,7 +1966,7 @@ index c32e6b01..89948435 100644
      if (flip) { uv[1] += uv[3]; uv[3] = -uv[3]; }   // lower-left origin: the window image is stored bottom-up
      [en setFragmentBytes:uv length:sizeof uv atIndex:0];
      [en drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
-@@ -17675,6 +17839,7 @@ static int present_blit(id<MTLCommandBuffer> cb, id<MTLTexture> src, id<MTLTextu
+@@ -18316,6 +18480,7 @@ static int present_blit(id<MTLCommandBuffer> cb, id<MTLTexture> src, id<MTLTextu
      return 1;
  }
  static int present_blit_m4(id<MTL4CommandBuffer> cb, id<MTLTexture> src, id<MTLTexture> dst, const int crop[4], id<MTLBuffer> uvBuffer, id table, BOOL flip, int screen) {
@@ -1974,7 +1974,7 @@ index c32e6b01..89948435 100644
      NSUInteger cx = 0, cy = 0, cw = src.width, ch = src.height;
      if (crop && (crop[2] || crop[3])) {
          if (crop[0] < 0 || crop[1] < 0 || crop[2] <= 0 || crop[3] <= 0 ||
-@@ -17703,6 +17868,14 @@ static int present_blit_m4(id<MTL4CommandBuffer> cb, id<MTLTexture> src, id<MTLT
+@@ -18344,6 +18509,14 @@ static int present_blit_m4(id<MTL4CommandBuffer> cb, id<MTLTexture> src, id<MTLT
      float *uv = uvBuffer.contents;
      uv[0] = (float)cx / src.width; uv[1] = (float)cy / src.height; uv[2] = (float)cw / src.width; uv[3] = (float)ch / src.height;
      uv[4] = (cx + 0.5f) / src.width; uv[5] = (cy + 0.5f) / src.height; uv[6] = (cx + cw - 0.5f) / src.width; uv[7] = (cy + ch - 0.5f) / src.height;
@@ -1989,7 +1989,7 @@ index c32e6b01..89948435 100644
      if (flip) { uv[1] += uv[3]; uv[3] = -uv[3]; }   // normalized AA input is already upright
      tab_buf(table, uvBuffer, 0, 0);
      [en setViewport:vp]; [en setRenderPipelineState:g_blit_pso];
-@@ -17726,11 +17899,44 @@ static const int *rs_aa_crop(id<MTLTexture> src, id<MTLTexture> dst, const int c
+@@ -18367,11 +18540,44 @@ static const int *rs_aa_crop(id<MTLTexture> src, id<MTLTexture> dst, const int c
      if (!vw || !vh || vw > w || vh > h || (vw == w && vh == h)) return crop;
      tmp[0] = tmp[1] = 0; tmp[2] = (int)vw; tmp[3] = (int)vh; return tmp;
  }
@@ -2020,7 +2020,7 @@ index c32e6b01..89948435 100644
 +}
  static int present_encode_slot(id<MTLCommandBuffer> cb, id<MTLTexture> src, id<MTLTexture> dst, const int crop[4], int slot) {
      present_options();
-     BOOL flip = atomic_load_explicit(&g_origin_ll, memory_order_relaxed) != 0;
+     BOOL flip = present_ll() != 0;   // the presented window's origin (see g_present_ll)
 -    NvPresentFX *fx = present_fx_for(slot, src, dst, crop, NO);
 -    if (!g_present_aa && !fx) return present_blit(cb, src, dst, crop, flip, 1);
 +    // HDR 画布（16F）：AA / MetalFX 空间放大的内部图与上屏管线仍是 8 位，直接叠上去会管线/画布不匹配。
@@ -2036,10 +2036,10 @@ index c32e6b01..89948435 100644
      id<MTLTexture> out;
      if (g_present_aa) {
          int ac[4]; NvPresentAA *s = present_aa_prepare(slot, src, rs_aa_crop(src, dst, crop, fx, ac));   // rs_aa_crop
-@@ -17757,8 +17963,14 @@ API_AVAILABLE(macos(26.0), ios(26.0))
+@@ -18398,8 +18604,14 @@ API_AVAILABLE(macos(26.0), ios(26.0))
  static int present_encode_m4(id<MTL4CommandBuffer> cb, id<MTLTexture> src, id<MTLTexture> dst, const int crop[4], int slot) {
      present_options();
-     BOOL flip = atomic_load_explicit(&g_origin_ll, memory_order_relaxed) != 0;
+     BOOL flip = present_ll() != 0;   // the presented window's origin (see g_present_ll)
 -    NvPresentFX *fx = present_fx_for(slot, src, dst, crop, YES);
 -    if (!g_present_aa && !fx) return present_blit_m4(cb, src, dst, crop, g_present_uv[slot], g_present_args, flip, 1);
 +    // HDR 画布（16F）：AA / MetalFX 空间放大的内部图与上屏管线仍是 8 位，直接叠上去会管线/画布不匹配。
@@ -2053,7 +2053,7 @@ index c32e6b01..89948435 100644
      id<MTLTexture> out;
      if (g_present_aa) {
          int ac[4]; NvPresentAA *s = present_aa_prepare(slot, src, rs_aa_crop(src, dst, crop, fx, ac));   // rs_aa_crop
-@@ -17912,7 +18124,13 @@ static int present_now(const tex_t *t, double period, uint64_t frame, uint64_t t
+@@ -18553,7 +18765,13 @@ static int present_now(const tex_t *t, double period, uint64_t frame, uint64_t t
      if (!layer) { NSUInteger icw = pcw, ich = pch;   // game units (pcw x pch above; was the crop / source size read here)
          float ky = s2a_widen_ky(); fit_geom(16.0 / 9.0 * s2a_widen_k() / (ky > 0 ? ky : 1) * ich, ich, icw, ich); }
      if (!layer) { if (g_grab_cb) grab_present(src, crop, nolayer_sz, ticket); return 0; }   // nolayer_sz (above; the same expression on the canvas)
@@ -2068,7 +2068,7 @@ index c32e6b01..89948435 100644
  #if TARGET_OS_OSX
      if (!layer.displaySyncEnabled) layer.displaySyncEnabled = YES;   // Windowed mode follows the display's vsync to prevent tearing
  #endif
-@@ -17923,7 +18141,72 @@ static int present_now(const tex_t *t, double period, uint64_t frame, uint64_t t
+@@ -18564,7 +18782,72 @@ static int present_now(const tex_t *t, double period, uint64_t frame, uint64_t t
      uint64_t dt0 = now_ns();
      id<CAMetalDrawable> dr = supplied ? supplied : [layer nextDrawable];
      if (!supplied) g_drawable_ns += now_ns() - dt0;
@@ -2143,28 +2143,27 @@ index c32e6b01..89948435 100644
      present_options();
      if (g_present_aa || g_present_fx) {
 diff --git a/graphics/nvn/gfx/nvn/nvn_present_fi.inc b/graphics/nvn/gfx/nvn/nvn_present_fi.inc
-index b8a27bf1..0c3365d1 100644
+index f61feea3..a140e558 100644
 --- a/graphics/nvn/gfx/nvn/nvn_present_fi.inc
 +++ b/graphics/nvn/gfx/nvn/nvn_present_fi.inc
-@@ -14,6 +14,9 @@ API_AVAILABLE(macos(26.0), ios(26.0))
+@@ -17,6 +17,9 @@ API_AVAILABLE(macos(26.0), ios(26.0))
  @interface NvPresentFI : NSObject {
  @public
      int w, h; NSUInteger hw, hh; MTLPixelFormat hpf; uint64_t n;
 +    MTLPixelFormat cfmt;   // 补帧链的颜色格式：跟着层（HDR 时 16F，MetalFX 不支持就退回 BGRA8，见 fi_get）
 +    int in_linear;         // 1 = 源游戏画面 src 本身是线性 16F（8 位 src 经 fsCopy 写入 16F in_tex 时仍是 sRGB 编码值）
 +    int nil_dr;            // 16F 下连续取不到 drawable 的次数，达限后退回 present_now 触发 8 位降级守卫
-     id<MTLTexture> in_tex[3], mid_tex, depth, motion;   // 输入图三张轮换（这一帧 / 上一帧 / 出图线程正在写的下一帧，读写不撞同一张）、补出的帧、常数深度、零运动
-     id<MTLFXFrameInterpolator> mfx; id<MTLCommandQueue> mq;   // MetalFX 帧插值在自己的 Metal 命令队列上编码
-     id<MTLRenderPipelineState> psoCopy;
-@@ -89,9 +92,16 @@ API_AVAILABLE(macos(26.0), ios(26.0))
+     id<MTLTexture> in_tex[2], mid_tex, depth, motion;   // 输入图两张轮换（这一帧 / 上一帧；同一队列按序，读写不会撞）、补出的帧、常数深度、运动矢量
+     id mfx;   // MTL4FXFrameInterpolator：编进上屏那条 Metal 4 队列的命令缓冲
+     id<MTLRenderPipelineState> psoCopy, psoMid;
+@@ -94,9 +97,15 @@ API_AVAILABLE(macos(26.0), ios(26.0))
  static int fi_mv_setup(NvPresentFI *f) {
      static const char *msl =
          "#include <metal_stdlib>\nusing namespace metal;\n"
 -        "kernel void down(texture2d<float, access::read> src [[texture(0)]], texture2d<float, access::write> dst [[texture(1)]], uint2 g [[thread_position_in_grid]]) {\n"
-+        // HDR 的补帧输入是 RGBA16Float（线性、可 > 1），而这两段 MSL 里的阈值都是在 8 位
++        // HDR 的补帧输入可能是线性 RGBA16Float（可 > 1），而这两段 MSL 里的阈值都是在 8 位
 +        // sRGB 编码域上标定的：match 的 `best*1.02+0.05`、spread 的 `abs(...)<0.004`（≈1 个码值）。
-+        // texture read 不解码，所以 16F 下必须先把线性值转回编码域，否则运动估计换了一个域：
-+        // 实测「前后两帧一样」的命中率从 100% 掉到 44–64% ⇒ 静止的界面/字幕被判成动了、被搬走。
++        // texture read 不解码，所以 16F 线性输入必须先转回编码域，否则静止判定命中率暴跌、界面出鬼影。
 +        // tools/fi_domain.c 量的就是这件事。enc=1 表示输入是线性域、要转编码。
 +        "static inline float3 to_enc(float3 c, uint enc) { if (!enc) return c; c = max(c, 0.0f);\n"
 +        "  return select(1.055f * pow(c, 1.0f / 2.4f) - 0.055f, c * 12.92f, c <= 0.0031308f); }\n"
@@ -2173,12 +2172,12 @@ index b8a27bf1..0c3365d1 100644
 -        "  for (uint y = 0; y < 4; y++) for (uint x = 0; x < 4; x++) { float3 c = src.read(uint2(g.x * 4 + x, g.y * 4 + y)).rgb; s += dot(c, float3(0.299, 0.587, 0.114)); }\n"
 +        "  for (uint y = 0; y < 4; y++) for (uint x = 0; x < 4; x++) { float3 c = to_enc(src.read(uint2(g.x * 4 + x, g.y * 4 + y)).rgb, enc); s += dot(c, float3(0.299, 0.587, 0.114)); }\n"
          "  dst.write(float4(s / 16, 0, 0, 0), g); }\n"
-         "kernel void match(texture2d<float, access::read> cur [[texture(0)]], texture2d<float, access::read> prev [[texture(1)]], device float2* out [[buffer(0)]], constant uint2& nb [[buffer(1)]],\n"
-         "                  uint2 b [[threadgroup_position_in_grid]], uint2 t [[thread_position_in_threadgroup]], uint li [[thread_index_in_threadgroup]], uint sl [[thread_index_in_simdgroup]], uint sg [[simdgroup_index_in_threadgroup]]) {\n"
-@@ -109,13 +119,13 @@ static int fi_mv_setup(NvPresentFI *f) {
-         "    if (sl == 0) { uint bi = k2 & 0x3FFu; float best = as_type<float>(k2 & ~0x3FFu); int2 bd = int2(int(bi % 32) - 16, int(bi / 32) - 16);\n"
-         "      if (zsad <= best * 1.02 + 0.05) bd = int2(0);   // 不动或平坦处偏向零位移，免得乱跳\n"
-         "      out[b.y * nb.x + b.x] = float2(bd) * 4; } } }\n"
+         "kernel void down2(texture2d<float, access::read> src [[texture(0)]], texture2d<float, access::write> dst [[texture(1)]], uint2 g [[thread_position_in_grid]]) {\n"
+         "  if (g.x >= dst.get_width() || g.y >= dst.get_height()) return; float s = 0;\n"
+@@ -127,13 +136,13 @@ static int fi_mv_setup(NvPresentFI *f) {
+         "  threadgroup_barrier(mem_flags::mem_threadgroup);\n"
+         "  for (uint w = 128; w > 0; w >>= 1) { if (li < w) acc[li] += acc[li + w]; threadgroup_barrier(mem_flags::mem_threadgroup); }\n"
+         "  if (li == 0) flag[0] = acc[0] / float(max(n, 1u)) > th ? 1u : 0u; }\n"
 -        "kernel void spread(device const float2* blk [[buffer(0)]], constant uint2& nb [[buffer(1)]], constant float& sign [[buffer(2)]], constant uint& sc [[buffer(3)]], texture2d<float, access::write> mv [[texture(0)]],\n"
 +        "kernel void spread(device const float2* blk [[buffer(0)]], constant uint2& nb [[buffer(1)]], constant float& sign [[buffer(2)]], constant uint& sc [[buffer(3)]], constant uint& enc [[buffer(4)]], texture2d<float, access::write> mv [[texture(0)]],\n"
          "                   texture2d<float, access::read> cur [[texture(1)]], texture2d<float, access::read> prev [[texture(2)]], uint2 g [[thread_position_in_grid]]) {\n"
@@ -2191,95 +2190,107 @@ index b8a27bf1..0c3365d1 100644
          "  mv.write(float4(v * sign, 0, 0), g); }\n";
      NSError *e = nil; id<MTLLibrary> lib = [g_dev newLibraryWithSource:@(msl) options:nil error:&e];
      if (!lib) { MLOG("【红】 frame interpolation motion shader: %s", e.localizedDescription.UTF8String); return 0; }
-@@ -134,7 +144,11 @@ API_AVAILABLE(macos(26.0), ios(26.0))
- static void fi_mv_encode(NvPresentFI *f, id<MTLCommandBuffer> c, id<MTLTexture> cur, id<MTLTexture> prev, float sign) {
-     id<MTLComputeCommandEncoder> en = [c computeCommandEncoder];
-     MTLSize tg = MTLSizeMake(8, 8, 1);
-+    // enc：只有当 in_tex 确实存放线性值（16F 且源图本身为线性 16F）时才转回 sRGB 编码域；
-+    // 8 位游戏源经 present_raw_src + fsCopy 拷进 16F in_tex 后仍是 sRGB 编码值，若无条件置 1 会二次编码扭曲阈值。
+@@ -150,10 +159,10 @@ static int fi_mv_setup(NvPresentFI *f) {
+     f->mvCoarse = [g_dev newBufferWithLength:(NSUInteger)(f->cbw * f->cbh) * 8 options:MTLResourceStorageModePrivate];
+     f->mvSad = [g_dev newBufferWithLength:(NSUInteger)MAX(f->bw * f->bh, f->cbw * f->cbh) * 4 options:MTLResourceStorageModePrivate];   // 每块对准后的差：粗层写完由切镜头核读，细层随后覆盖
+     f->mvFlag = [g_dev newBufferWithLength:4 options:MTLResourceStorageModeShared]; if (f->mvFlag) memset(f->mvFlag.contents, 0, 4);
+-    // Metal 4 没有 setBytes：常量都在这一块共享缓冲里按偏移绑（建时写一次，方向每帧写）：0 细层块数 uint2（铺开用）、8 方向 float、12 铺开比例 uint、
+-    //   16 粗层 gm uint4、32 细层 gm uint4、48 粗层 pn uint2（0 = 没有预测）、56 细层 pn uint2（粗层网格）、64 切镜头阈值 float
++    // Metal 4 没有 setBytes：常量都在这一块共享缓冲里按偏移绑（建时写一次，方向与 enc 每帧写）：0 细层块数 uint2（铺开用）、8 方向 float、12 铺开比例 uint、
++    //   16 粗层 gm uint4、32 细层 gm uint4、48 粗层 pn uint2（0 = 没有预测）、56 细层 pn uint2（粗层网格）、64 切镜头阈值 float、68 编码域标志 uint（HDR 线性转编码）
+     f->mvArgs = [g_dev newBufferWithLength:80 options:MTLResourceStorageModeShared];
+-    NSError *te = nil; f->mvTab = tab_new(4, 3, 1, &te);
++    NSError *te = nil; f->mvTab = tab_new(5, 3, 1, &te);
+     if (!f->mvDown || !f->mvDown2 || !f->mvMatch || !f->mvSpread || !f->mvCut || !f->luma[0] || !f->luma[1] || !f->luma16[0] || !f->luma16[1] || !f->mvBlocks || !f->mvCoarse || !f->mvSad || !f->mvFlag || !f->mvArgs || !f->mvTab) {
+         MLOG("【红】 frame interpolation motion setup: %s", (e ?: te).localizedDescription.UTF8String ?: "resources"); return 0; }
+     res_add(f->mvBlocks); res_add(f->mvCoarse); res_add(f->mvSad); res_add(f->mvFlag); res_add(f->mvArgs);
+@@ -169,10 +178,12 @@ static int fi_mv_setup(NvPresentFI *f) {
+ //   编码器前后是队列级全屏障（同上屏编码器），与前面的缩拷、后面的 MetalFX 按序；编码器里两步之间是编码器内屏障
+ API_AVAILABLE(macos(26.0), ios(26.0))
+ static void fi_mv_encode(NvPresentFI *f, id cb, int k, int pair, float sign) {
+-    uint32_t *a = f->mvArgs.contents; memcpy(&a[2], &sign, 4); a[3] = (uint32_t)(f->w / f->motion.width);
++    id<MTLTexture> cur = f->in_tex[k];
 +    uint32_t enc = (cur.pixelFormat == MTLPixelFormatRGBA16Float && f->in_linear) ? 1u : 0u;
-     [en setComputePipelineState:f->mvDown];
-+    [en setBytes:&enc length:sizeof enc atIndex:0];
-     [en setTexture:cur atIndex:0]; [en setTexture:f->lumaCur atIndex:1]; [en dispatchThreads:MTLSizeMake(f->qw, f->qh, 1) threadsPerThreadgroup:tg];
-     [en setTexture:prev atIndex:0]; [en setTexture:f->lumaPrev atIndex:1]; [en dispatchThreads:MTLSizeMake(f->qw, f->qh, 1) threadsPerThreadgroup:tg];
-     [en memoryBarrierWithScope:MTLBarrierScopeTextures];
-@@ -143,7 +157,7 @@ static void fi_mv_encode(NvPresentFI *f, id<MTLCommandBuffer> c, id<MTLTexture>
-     [en setBuffer:f->mvBlocks offset:0 atIndex:0]; [en setBytes:nb length:sizeof nb atIndex:1];
-     [en dispatchThreadgroups:MTLSizeMake(f->bw, f->bh, 1) threadsPerThreadgroup:MTLSizeMake(32, 32, 1)];   // 每块一组，组内 1024 线程各算一个位移（±16 → 32×32）
-     [en memoryBarrierWithScope:MTLBarrierScopeBuffers];
--    [en setComputePipelineState:f->mvSpread]; [en setBuffer:f->mvBlocks offset:0 atIndex:0]; [en setBytes:nb length:sizeof nb atIndex:1]; [en setBytes:&sign length:4 atIndex:2]; uint32_t sc = (uint32_t)(f->w / f->motion.width); [en setBytes:&sc length:4 atIndex:3];
-+    [en setComputePipelineState:f->mvSpread]; [en setBuffer:f->mvBlocks offset:0 atIndex:0]; [en setBytes:nb length:sizeof nb atIndex:1]; [en setBytes:&sign length:4 atIndex:2]; uint32_t sc = (uint32_t)(f->w / f->motion.width); [en setBytes:&sc length:4 atIndex:3]; [en setBytes:&enc length:sizeof enc atIndex:4];
-     [en setTexture:f->motion atIndex:0]; [en setTexture:cur atIndex:1]; [en setTexture:prev atIndex:2]; [en dispatchThreads:MTLSizeMake(f->motion.width, f->motion.height, 1) threadsPerThreadgroup:tg];
-     [en endEncoding];
- }
-@@ -158,7 +172,7 @@ static int fi_copy_setup(NvPresentFI *f) {
++    uint32_t *a = f->mvArgs.contents; memcpy(&a[2], &sign, 4); a[3] = (uint32_t)(f->w / f->motion.width); a[17] = enc;
+     id t = f->mvTab; id e = enc_c_begin_on(cb, YES); [e setArgumentTable:t];
+     MTLSize tg = MTLSizeMake(8, 8, 1), tm = MTLSizeMake(32, 32, 1);   // 匹配：每块一组，组内 1024 线程各算一个位移（±16 → 32×32）
+-    [e setComputePipelineState:f->mvDown]; tab_tex(t, f->in_tex[k], 0); tab_tex(t, f->luma[k], 1);
++    [e setComputePipelineState:f->mvDown]; tab_tex(t, cur, 0); tab_tex(t, f->luma[k], 1); tab_buf(t, f->mvArgs, 68, 0);
+     [e dispatchThreads:MTLSizeMake((NSUInteger)f->qw, (NSUInteger)f->qh, 1) threadsPerThreadgroup:tg];
+     enc_c_inner_barrier(e);
+     [e setComputePipelineState:f->mvDown2]; tab_tex(t, f->luma[k], 0); tab_tex(t, f->luma16[k], 1);
+@@ -190,8 +201,8 @@ static void fi_mv_encode(NvPresentFI *f, id cb, int k, int pair, float sign) {
+         tab_tex(t, f->luma[k], 0); tab_tex(t, f->luma[k ^ 1], 1); tab_buf(t, f->mvBlocks, 0, 0); tab_buf(t, f->mvArgs, 32, 1); tab_buf(t, f->mvCoarse, 0, 2); tab_buf(t, f->mvArgs, 56, 3); tab_buf(t, f->mvSad, 0, 4);   // 细层（1/4，以粗矢量为中心）
+         [e dispatchThreadgroups:MTLSizeMake((NSUInteger)f->bw, (NSUInteger)f->bh, 1) threadsPerThreadgroup:tm];
+         enc_c_inner_barrier(e);
+-        [e setComputePipelineState:f->mvSpread]; tab_buf(t, f->mvBlocks, 0, 0); tab_buf(t, f->mvArgs, 0, 1); tab_buf(t, f->mvArgs, 8, 2); tab_buf(t, f->mvArgs, 12, 3);
+-        tab_tex(t, f->motion, 0); tab_tex(t, f->in_tex[k], 1); tab_tex(t, f->in_tex[k ^ 1], 2);
++        [e setComputePipelineState:f->mvSpread]; tab_buf(t, f->mvBlocks, 0, 0); tab_buf(t, f->mvArgs, 0, 1); tab_buf(t, f->mvArgs, 8, 2); tab_buf(t, f->mvArgs, 12, 3); tab_buf(t, f->mvArgs, 68, 4);
++        tab_tex(t, f->motion, 0); tab_tex(t, cur, 1); tab_tex(t, f->in_tex[k ^ 1], 2);
+         [e dispatchThreads:MTLSizeMake(f->motion.width, f->motion.height, 1) threadsPerThreadgroup:tg];
+     }
+     enc_end_on(e, YES);
+@@ -210,7 +221,7 @@ static int fi_copy_setup(NvPresentFI *f) {
      NSError *e = nil; id<MTLLibrary> lib = [g_dev newLibraryWithSource:@(msl) options:nil error:&e];
      if (!lib) { MLOG("【红】 frame interpolation shader: %s", e.localizedDescription.UTF8String); return 0; }
      MTLRenderPipelineDescriptor *pd = [MTLRenderPipelineDescriptor new];
 -    pd.vertexFunction = [lib newFunctionWithName:@"vs"]; pd.fragmentFunction = [lib newFunctionWithName:@"fsCopy"]; pd.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
-+    pd.vertexFunction = [lib newFunctionWithName:@"vs"]; pd.fragmentFunction = [lib newFunctionWithName:@"fsCopy"]; pd.colorAttachments[0].pixelFormat = f->cfmt;   // 跟着补帧链的颜色格式（HDR → 16F）
++    pd.vertexFunction = [lib newFunctionWithName:@"vs"]; pd.fragmentFunction = [lib newFunctionWithName:@"fsCopy"]; pd.colorAttachments[0].pixelFormat = f->cfmt;
      f->psoCopy = [g_dev newRenderPipelineStateWithDescriptor:pd error:&e];
-     if (!f->psoCopy) { MLOG("【红】 frame interpolation pipeline: %s", e.localizedDescription.UTF8String); return 0; }
-     return 1;
-@@ -171,10 +185,11 @@ static NvPresentFI *fi_get(CAMetalLayer *layer, NSUInteger cw, NSUInteger ch) {
-     static int maxh = -1; if (maxh < 0) { const char *e = getenv("DM_PRESENT_FI_MAXH"); maxh = e && atoi(e) > 0 ? atoi(e) : 1080; }
+     pd.fragmentFunction = [lib newFunctionWithName:@"fsMid"]; f->psoMid = [g_dev newRenderPipelineStateWithDescriptor:pd error:&e];
+     if (!f->psoCopy || !f->psoMid) { MLOG("【红】 frame interpolation pipeline: %s", e.localizedDescription.UTF8String); return 0; }
+@@ -225,8 +236,8 @@ static NvPresentFI *fi_get(CAMetalLayer *layer, NSUInteger cw, NSUInteger ch) {
      double s = ch > (NSUInteger)maxh ? (double)maxh / ch : 1;
      int iw = (int)(cw * s) & ~1, ih = (int)(ch * s) & ~1;
--    if (f && f->hw == hw && f->hh == hh && f->hpf == layer.pixelFormat && f->w == iw && f->h == ih) return f;
--    if (f && (f->w != iw || f->h != ih)) {   // 画面比例变了（11-13 iPhone 实机：开局竖屏、几秒后转横屏）：插值器的输入尺寸是建时定死的，等在途的活做完、整个重建
-+    if (f && f->hw == hw && f->hh == hh && f->hpf == layer.pixelFormat && f->w == iw && f->h == ih) return f;   // hpf 相同即 cfmt 相同
-+    if (f && (f->w != iw || f->h != ih || f->hpf != layer.pixelFormat)) {   // 画面比例或层格式变了（16F↔8B 降级/重探）：等在途作业做完、整个重建
-         dispatch_sync(f->q, ^{});
+     if (f && f->hw == hw && f->hh == hh && f->hpf == layer.pixelFormat && f->w == iw && f->h == ih) return f;
+-    if (f && (f->w != iw || f->h != ih)) {   // 画面比例变了（11-13 iPhone 实机：开局竖屏、几秒后转横屏）：插值器的输入尺寸是建时定死的，整个重建（旧对象的在途 GPU 工作由命令缓冲持有）
 -        MLOG("present frame interpolation: the game picture changed to %lux%lu (input %dx%d → %dx%d), rebuilding", (unsigned long)cw, (unsigned long)ch, f->w, f->h, iw, ih);
-+        MLOG("present frame interpolation: the game picture/format changed (%lux%lu, fmt %lu → %lu, input %dx%d → %dx%d), rebuilding",
-+             (unsigned long)cw, (unsigned long)ch, (unsigned long)f->hpf, (unsigned long)layer.pixelFormat, f->w, f->h, iw, ih);
++    if (f && (f->w != iw || f->h != ih || f->hpf != layer.pixelFormat)) {   // 画面比例或层像素格式变了（HDR 16F↔8B 切换或竖/横屏切换）：插值器的输入尺寸与格式是建时定死的，整个重建（旧对象的在途 GPU 工作由命令缓冲持有）
++        MLOG("present frame interpolation: the game picture or format changed to %lux%lu (input %dx%d → %dx%d), rebuilding", (unsigned long)cw, (unsigned long)ch, f->w, f->h, iw, ih);
          g_fi = nil; f = nil;
      }
      // 不链 MetalFX 框架（同 nvn_present_fx.inc）：类按名字从运行时取，首次用时 dlopen 系统框架
-@@ -187,11 +202,23 @@ static NvPresentFI *fi_get(CAMetalLayer *layer, NSUInteger cw, NSUInteger ch) {
+@@ -239,13 +250,24 @@ static NvPresentFI *fi_get(CAMetalLayer *layer, NSUInteger cw, NSUInteger ch) {
          static int mvq = -1; if (mvq < 0) { const char *e = getenv("DM_PRESENT_FI_MVQ"); mvq = !(e && !strcmp(e, "0")); if (mvq) MLOG("present frame interpolation: motion / depth at quarter size (DM_PRESENT_FI_MVQ=0 for full size)"); }
          int mw = mvq && fi_mv_mode() ? iw / 4 : iw, mh = mvq && fi_mv_mode() ? ih / 4 : ih;
          d.outputWidth = (NSUInteger)iw; d.outputHeight = (NSUInteger)ih; d.inputWidth = (NSUInteger)mw; d.inputHeight = (NSUInteger)mh;
 -        d.colorTextureFormat = d.outputTextureFormat = MTLPixelFormatBGRA8Unorm; d.depthTextureFormat = MTLPixelFormatR32Float; d.motionTextureFormat = MTLPixelFormatRG16Float;
--        f->mfx = [d newFrameInterpolatorWithDevice:g_dev]; f->mq = [g_dev newCommandQueue];
-+        d.depthTextureFormat = MTLPixelFormatR32Float; d.motionTextureFormat = MTLPixelFormatRG16Float;
-+        // 颜色格式跟着层走：HDR 画布给 16F（补出来的帧才不会把 >1.0 的高光压回 1.0）。
-+        //   MetalFX 的帧插值对 16F 的支持按机型/系统版本不同，建不出来就退回 BGRA8 并告警——补帧照旧工作，只是补出的帧少 4 位。
+-        id comp = present_fx_compiler(); f->mfx = comp ? [d newFrameInterpolatorWithDevice:g_dev compiler:comp] : nil;   // Metal 4 版：编进上屏队列的命令缓冲
++        // 16F 画布下优先让 MetalFX 在 RGBA16Float 上插值，保留 >1 高光；不支持时自动回退 BGRA8。
 +        MTLPixelFormat want = (layer.pixelFormat == MTLPixelFormatRGBA16Float) ? MTLPixelFormatRGBA16Float : MTLPixelFormatBGRA8Unorm;
-+        for (int attempt = 0; attempt < 2 && !f->mfx; attempt++) {
-+            MTLPixelFormat cf = attempt == 0 ? want : MTLPixelFormatBGRA8Unorm;
++        MTLPixelFormat try_fmts[2] = { want, MTLPixelFormatBGRA8Unorm };
++        int ntry = (want == MTLPixelFormatBGRA8Unorm) ? 1 : 2;
++        id comp = present_fx_compiler();
++        for (int ti = 0; ti < ntry && !f->mfx; ti++) {
++            MTLPixelFormat cf = try_fmts[ti];
 +            d.colorTextureFormat = d.outputTextureFormat = cf;
-+            @try { f->mfx = [d newFrameInterpolatorWithDevice:g_dev]; }
-+            @catch (NSException *ex) { f->mfx = nil; (void)ex; }
++            d.depthTextureFormat = MTLPixelFormatR32Float; d.motionTextureFormat = MTLPixelFormatRG16Float;
++            @try { f->mfx = comp ? [d newFrameInterpolatorWithDevice:g_dev compiler:comp] : nil; } @catch (NSException *ex) { (void)ex; f->mfx = nil; }
 +            if (f->mfx) f->cfmt = cf;
-+            else if (attempt == 0 && want != MTLPixelFormatBGRA8Unorm)
-+                MLOG("【黄】HDR：MetalFX 帧插值不接受 RGBA16Float 颜色，补帧退回 8 位（补出的帧少 4 位精度）");
++            else if (ti == 0 && ntry == 2) MLOG("【黄】HDR：MetalFX 不支持 RGBA16Float 帧插值，回退 BGRA8");
 +        }
-+        f->mq = [g_dev newCommandQueue];
-         if (!f->mfx || !f->mq) { fi_off("MetalFX makes no frame interpolator for this size"); return nil; }
--        for (int i = 0; i < 3; i++) f->in_tex[i] = fi_tex(MTLPixelFormatBGRA8Unorm, iw, ih, f->mfx.colorTextureUsage | MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead);
--        f->mid_tex = fi_tex(MTLPixelFormatBGRA8Unorm, iw, ih, f->mfx.outputTextureUsage | MTLTextureUsageShaderRead);
-+        for (int i = 0; i < 3; i++) f->in_tex[i] = fi_tex(f->cfmt, iw, ih, f->mfx.colorTextureUsage | MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead);
-+        f->mid_tex = fi_tex(f->cfmt, iw, ih, f->mfx.outputTextureUsage | MTLTextureUsageShaderRead);
-         f->depth = fi_tex(MTLPixelFormatR32Float, mw, mh, f->mfx.depthTextureUsage | MTLTextureUsageRenderTarget);
-         f->motion = fi_tex(MTLPixelFormatRG16Float, mw, mh, f->mfx.motionTextureUsage | MTLTextureUsageRenderTarget | MTLTextureUsageShaderWrite);
-         if (!f->in_tex[0] || !f->in_tex[1] || !f->in_tex[2] || !f->mid_tex || !f->depth || !f->motion) { fi_off("cannot create the interpolation textures"); return nil; }
-@@ -202,7 +229,12 @@ static NvPresentFI *fi_get(CAMetalLayer *layer, NSUInteger cw, NSUInteger ch) {
+         if (!f->mfx) { fi_off("MetalFX makes no Metal 4 frame interpolator for this size"); return nil; }
+         id<MTLFXFrameInterpolatorBase> fb = f->mfx;
+         [fb setFence:[g_dev newFence]];   // 同 MTL4FX 空间放大：Metal 4 下 MetalFX 要带栅栏（只给它内部用；前后顺序由我们编码器的队列级全屏障保证）
+-        for (int i = 0; i < 2; i++) f->in_tex[i] = fi_tex(MTLPixelFormatBGRA8Unorm, iw, ih, fb.colorTextureUsage | MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead);
+-        f->mid_tex = fi_tex(MTLPixelFormatBGRA8Unorm, iw, ih, fb.outputTextureUsage | MTLTextureUsageShaderRead);
++        for (int i = 0; i < 2; i++) f->in_tex[i] = fi_tex(f->cfmt, iw, ih, fb.colorTextureUsage | MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead);
++        f->mid_tex = fi_tex(f->cfmt, iw, ih, fb.outputTextureUsage | MTLTextureUsageShaderRead);
+         f->depth = fi_tex(MTLPixelFormatR32Float, mw, mh, fb.depthTextureUsage | MTLTextureUsageRenderTarget);
+         f->motion = fi_tex(MTLPixelFormatRG16Float, mw, mh, fb.motionTextureUsage | MTLTextureUsageRenderTarget | MTLTextureUsageShaderWrite);
+         if (!f->in_tex[0] || !f->in_tex[1] || !f->mid_tex || !f->depth || !f->motion) { fi_off("cannot create the interpolation textures"); return nil; }
+@@ -256,7 +278,8 @@ static NvPresentFI *fi_get(CAMetalLayer *layer, NSUInteger cw, NSUInteger ch) {
              [[c renderCommandEncoderWithDescriptor:rp] endEncoding]; [c commit]; [c waitUntilCompleted];
          }
          NSError *te = nil;
--        for (int i = 0; i < 4; i++) { f->uv[i] = [g_dev newBufferWithLength:8 * sizeof(float) options:MTLResourceStorageModeShared]; res_add(f->uv[i]); f->tab[i] = tab_new(1, 1, 1, &te); if (!f->uv[i] || !f->tab[i]) { fi_off("cannot create the blit tables"); return nil; } }
-+        // 16 float = 8 裁剪 + 4 knee + 4 extra，与 present_blit_m4 的 HdrCrop 完全一致。
-+        //   曾经是 8：present_blit_m4 只在 `uvBuffer.length >= 16*sizeof(float)` 时才写 knee/extra，
-+        //   于是补帧这条路上 knee 恒 0 → 16F 上屏的扩张 shader 走退化分支（knee_hi <= knee_lo）
-+        //   返回 a*knee.z（=0）⇒ **HDR + 补帧同时开时画布是黑的**。缓冲区归零掩盖了这个长度不匹配，
-+        //   日志里也看不出来（渲染成功、只是全黑）。
-+        for (int i = 0; i < 4; i++) { f->uv[i] = [g_dev newBufferWithLength:16 * sizeof(float) options:MTLResourceStorageModeShared];  /* 8 裁剪 + 4 knee + 4 extra（HDR 上屏走 HdrCrop） */ res_add(f->uv[i]); f->tab[i] = tab_new(1, 1, 1, &te); if (!f->uv[i] || !f->tab[i]) { fi_off("cannot create the blit tables"); return nil; } }
+-        for (int i = 0; i < 4; i++) { f->uv[i] = [g_dev newBufferWithLength:8 * sizeof(float) options:MTLResourceStorageModeShared]; res_add(f->uv[i]); f->tab[i] = tab_new(i == 2 ? 2 : 1, i == 2 ? 2 : 1, 1, &te); if (!f->uv[i] || !f->tab[i]) { fi_off("cannot create the blit tables"); return nil; } }
++        // HDR 上屏走 HdrCrop（16 float = 8 裁剪 + 4 knee + 4 extra）；缓冲长度不足会让 present_blit_m4 跳过 knee 写入导致全黑。
++        for (int i = 0; i < 4; i++) { f->uv[i] = [g_dev newBufferWithLength:16 * sizeof(float) options:MTLResourceStorageModeShared]; res_add(f->uv[i]); f->tab[i] = tab_new(i == 2 ? 2 : 1, i == 2 ? 2 : 1, 1, &te); if (!f->uv[i] || !f->tab[i]) { fi_off("cannot create the blit tables"); return nil; } }
          for (int i = 0; i < 3; i++) { f->alloc[i] = [g_dev newCommandAllocator]; f->cb[i] = [g_dev newCommandBuffer]; f->slot_free[i] = dispatch_semaphore_create(1); if (!f->alloc[i] || !f->cb[i]) { fi_off("cannot create the command buffers"); return nil; } }
-         f->q = dispatch_queue_create("dm.nvn.present-fi", dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_USER_INTERACTIVE, 0)); f->last_seq = UINT64_MAX;
+         f->last_seq = f->last_pair_seq = UINT64_MAX; atomic_store(&f->cut_seq, UINT64_MAX);
          if (!fi_copy_setup(f)) { fi_off("cannot create the copy pipeline"); return nil; }
-@@ -257,7 +289,7 @@ API_AVAILABLE(macos(26.0), ios(26.0))
- static int fi_commit(NvPresentFI *f, int s, id<CAMetalDrawable> dr, int (^enc)(id cb), void (^after)(int ok)) {
+@@ -312,7 +335,7 @@ API_AVAILABLE(macos(26.0), ios(26.0))
+ static int fi_commit(NvPresentFI *f, int s, id<CAMetalDrawable> dr, int (^enc)(id cb), void (^after)(int ok, double gpu_ms)) {
      dispatch_semaphore_wait(f->slot_free[s], DISPATCH_TIME_FOREVER);
      pthread_mutex_lock(&g_fi_enc_mu);
 -    present_pipeline(MTLPixelFormatBGRA8Unorm);   // 取样器（g_blit_samp）在这里建
@@ -2287,26 +2298,28 @@ index b8a27bf1..0c3365d1 100644
      if (dr) [g_q4 waitForDrawable:dr];
      id cb = f->cb[s]; m4_begin_on(cb, f->alloc[s]);
      int ok = enc(cb);
-@@ -317,8 +349,17 @@ static void fi_job(NvPresentFI *f, CAMetalLayer *layer, id<MTLTexture> src, fi_c
-     //   两侧黑边隔一帧一有，看着闪）：有补丁画幅就按它，没有照旧按输入图比例
-     double pa = s2a_cpatch_present_aspect();
-     if (have_mid) { id<CAMetalDrawable> dm = [layer nextDrawable]; NSUInteger vh = (NSUInteger)f->h, vw = pa > 0 ? (NSUInteger)llround(f->h * pa) : (NSUInteger)f->w;
--        if (dm && fi_commit(f, 1, dm, ^int(id cb) { return dup ? present_blit_m4(cb, src, dm.texture, crop, f->uv[2], f->tab[2], flip, 1) : fi_pass(cb, f->psoCopy, f->tab[2], f->uv[2], mid, nil, dm.texture, NULL, NO, vw, vh); }, nil)) { fi_count_on(dm, &g_fi_on_mid); [dm present]; mid_shown = 1; f->shown_mid++; } }
-+        if (dm && fi_commit(f, 1, dm, ^int(id cb) {
-+                if (dup) return present_blit_m4(cb, src, dm.texture, crop, f->uv[2], f->tab[2], flip, 1);
-+                // 目标画布是 16F 时一律走 present_blit_m4（即使 MetalFX 回退到 8 位 cfmt，也必须走 16F 扩张管线，
-+                // 避免 BGRA8 的 psoCopy 与 RGBA16Float 画布格式不匹配）；且 mid 写入 in_tex 时已按 flip 翻正，这里必须传 NO。
-+                if (dm.texture.pixelFormat == MTLPixelFormatRGBA16Float || f->cfmt == MTLPixelFormatRGBA16Float)
-+                    return present_blit_m4(cb, mid, dm.texture, NULL, f->uv[2], f->tab[2], NO, 1);
-+                return fi_pass(cb, f->psoCopy, f->tab[2], f->uv[2], mid, nil, dm.texture, NULL, NO, vw, vh); }, nil)) { fi_count_on(dm, &g_fi_on_mid); [dm present]; mid_shown = 1; f->shown_mid++; } }
+@@ -367,6 +390,10 @@ static void fi_job(NvPresentFI *f, CAMetalLayer *layer, id<MTLTexture> src, fi_c
+             }
+             if (!dm) return 1;
+             if (dup) return present_blit_m4(cb, src, dm.texture, crop, f->uv[2], f->tab[2], flip, 1);
++            // 目标画布是 16F 时一律走 present_blit_m4（即使 MetalFX 回退到 8 位 cfmt，也必须走 16F 扩张管线，
++            // 避免 BGRA8 的 psoCopy/psoMid 与 RGBA16Float 画布格式不匹配）；且 mid 写入 in_tex 时已按 flip 翻正，这里必须传 NO。
++            if (dm.texture.pixelFormat == MTLPixelFormatRGBA16Float || f->cfmt == MTLPixelFormatRGBA16Float)
++                return present_blit_m4(cb, mid, dm.texture, NULL, f->uv[2], f->tab[2], NO, 1);
+             int cut_check = use_fx && fi_mv_mode() && f->mvFlag;   // 切镜头时 GPU 上改画这一帧的输入图
+             return fi_pass(cb, cut_check ? f->psoMid : f->psoCopy, f->tab[2], f->uv[2], mid, cut_check ? f->in_tex[k] : nil, dm.texture, NULL, NO, vw, vh);
+         }, use_fx ? ^(int gok, double gms) {
+@@ -382,6 +409,9 @@ static void fi_job(NvPresentFI *f, CAMetalLayer *layer, id<MTLTexture> src, fi_c
+     // 真帧（游戏原图直接画进画布）：有补出的帧就隔半个游戏周期再上
+     double half = period > 0 ? period / 2 : 1.0 / 60;
      id<CAMetalDrawable> dr = [layer nextDrawable];
 +    if (dr) f->nil_dr = 0;
 +    else if (layer.pixelFormat == MTLPixelFormatRGBA16Float && ++f->nil_dr >= S2A_HDR_NIL_LIMIT)
 +        fi_off("16F drawable unavailable in frame interpolation; handing back to present_now fmt guard");
-     if (dr && fi_commit(f, 2, dr, ^int(id cb) { return present_blit_m4(cb, src, dr.texture, crop, f->uv[3], f->tab[3], flip, 1); }, ^(int ok) { (void)ok; fi_ticket_done(ticket); })) {
+     if (dr && fi_commit(f, 2, dr, ^int(id cb) { return present_blit_m4(cb, src, dr.texture, crop, f->uv[3], f->tab[3], flip, 1); }, ^(int ok2, double gms) { (void)ok2; (void)gms; fi_ticket_done(ticket); })) {
  #if !TARGET_OS_SIMULATOR
          present_note(dr, ticket); fi_count_on(dr, &g_fi_on_real);
-@@ -347,6 +388,8 @@ API_AVAILABLE(macos(26.0), ios(26.0))
+@@ -404,6 +434,8 @@ API_AVAILABLE(macos(26.0), ios(26.0))
  static int fi_frame(id<MTLTexture> src, const int crop[4], CAMetalLayer *layer, double period, uint64_t ticket) {
      NSUInteger cw = crop && (crop[2] || crop[3]) ? (NSUInteger)crop[2] : src.width, ch = crop && (crop[2] || crop[3]) ? (NSUInteger)crop[3] : src.height;
      NvPresentFI *f = fi_get(layer, cw, ch); if (!f) return -1;
@@ -2314,23 +2327,23 @@ index b8a27bf1..0c3365d1 100644
 +    if (layer.pixelFormat == MTLPixelFormatRGBA16Float) hdr_hist_tick_m4(src);
      uint64_t now = now_ns(); double gap = f->last_in_ns ? (now - f->last_in_ns) / 1e9 : 0; f->last_in_ns = now;
      int allow = dm_fi_should_interp(period, gap);   // 游戏声明的节拍（period，由交换间隔折成）+ 这一帧是否跑满；60 帧档一律不补
-     uint64_t seq = f->n++; int k = (int)(seq % 3); BOOL flip = atomic_load_explicit(&g_origin_ll, memory_order_relaxed) != 0;
+     uint64_t seq = f->n++; BOOL flip = present_ll() != 0;   // the presented window's origin (nvn_mtl.m g_present_ll)
 diff --git a/graphics/nvn/host_adapt.m b/graphics/nvn/host_adapt.m
-index 0677df12..44fb90c1 100644
+index 4289832f..a36db52c 100644
 --- a/graphics/nvn/host_adapt.m
 +++ b/graphics/nvn/host_adapt.m
-@@ -14,6 +14,7 @@
- #include "gfx/nvn/nvn2.h"            // Switch 2：NVN2 控制段（dsh_miss.inc 不现编）、dm_nvn2_driver_item
+@@ -15,6 +15,7 @@
+ #include "gfx/nvn/nvn_hdr_policy.h"  // HDR 上屏策略（PR3a）：挂层块查屏、发布 hdr_snapshot 环境读数（nvn2_hdr_* 入口实现在 nvn2.c）
  #include "gfx/nvn/dmsh_chain.h"      // DMSH_CHAIN：外置着色器包要带本链号的库目录才用
  #include "gfx/nvn/shader_overlay.h"  // 着色器包外置：文档目录 gal/<程序号>/shaders
 +#include "gfx/nvn/nvn_hdr.h"       // HDR 出屏：s2a_hdr_enabled（只认 0/false/no/off 为关）
  #include "gfx/nvn/nvn_present_fit.h"   // pf_viewport：出图层在视图里的摆放与出图层内画面的摆放同一条规则（差 < 1% 铺满）
  #include <TargetConditionals.h>
  #include <sys/stat.h>
-@@ -173,6 +174,35 @@ void s2a_direct_out_size(int *w, int *h) { *w = g_out_w; *h = g_out_h; }
- // 截图走游戏自己的源图（grab_present），都不读图层贴图；只当帧缓冲时驱动可以用更省的存储与压缩，少一次整屏读写（10-26 暗黑2 能耗对照小菠萝）。
- // 要回读图层贴图的诊断才设 DM_NVN_FB_READBACK=1（关掉这项优化）
- static int fb_readback(void) { static int v = -1; if (v < 0) { const char *e = getenv("DM_NVN_FB_READBACK"); v = e && !strcmp(e, "1"); } return v; }
+@@ -193,6 +194,35 @@ void s2a_hdr_screen_publish(double potential_edr, double current_headroom) {
+     LOG("直连：HDR 策略快照发布：potentialEDR %.3f / currentEDR %.3f / s1_ready 0 / 纸白 100（S2ARM_HDR=%d：%s）", potential_edr, current_headroom, sw,
+         sw == HDR_OFF ? "off，恒 S0 直通" : sw == HDR_AUTO ? "auto，按快照" : "on，强制 HDR 管线（G1 / PR4 未落，S1 要等烟囱）");
+ }
 +// HDR 出屏（S2A_HDR_OUTPUT=1）：直连层换成 RGBA16Float 并声明 EDR，上屏着色器才有地方写 >1.0 的高光。
 +//   S2A_HDR_FMT=1/0 只改诊断的那一半（1 = 只换 16F 不声明 EDR，0 = 只声明 EDR 仍是 8 位），与 0.3.5 的 ab-hdr-fmt 同义；
 +//   组合规则与单测见 s2a_hdr_out_plan / t_hdr_env（FMT=1 + OUTPUT=1 仍是 16F + EDR）。
@@ -2363,15 +2376,7 @@ index 0677df12..44fb90c1 100644
  #if TARGET_OS_IPHONE
  UIView *s2a_ios_root_view(void) __attribute__((weak_import));
  // 出图层该挂的视图（ios/extdisplay.m，主线程）：外接显示器接着 = 外接屏窗口的视图，否则根视图。没有这个符号的壳一律根视图
-@@ -263,6 +293,7 @@ void s2a_direct_relayout(void) {   // App 壳视图控制器 viewDidLayoutSubvie
-         re ? "，宽屏核心下一个渲染遍按新比例出图" : "");
-     if (!re && fabs(va / g_out_a - 1) > 0.01) LOG("【黄】直连：可用区域比例 %.3f 与出图比例 %.3f 不同，按实际出图比例居中；固定尺寸的路径须重新启动游戏后应用新比例", va, g_out_a);
- }
-+
- void *front_metal_layer(void) {
-     static dispatch_once_t once;
-     dispatch_once(&once, ^{
-@@ -270,9 +301,10 @@ void *front_metal_layer(void) {
+@@ -307,9 +337,10 @@ void *front_metal_layer(void) {
          void (^mk)(void) = ^{
              UIView *v = present_view(); if (!v) return;
              CAMetalLayer *l = [CAMetalLayer layer];
@@ -2383,7 +2388,7 @@ index 0677df12..44fb90c1 100644
              // 挂在最底层（11-02）：原先 addSublayer 压在根视图所有子视图之上，加载页 / 提示页（没设 zPosition）全被黑色出图层盖住——
              //   怪猎测试设备1 冷首启预热 64 秒，屏上只有手柄（手柄与开发浮层靠 zPosition 压过它），玩家对着黑屏点中了看不见的「先开始玩」
              if (s2a_ios_attach_game_layer) s2a_ios_attach_game_layer(v,l);
-@@ -302,7 +334,8 @@ void *front_metal_layer(void) {
+@@ -349,7 +380,8 @@ void *front_metal_layer(void) {
      dispatch_once(&once, ^{ f = (void *(*)(void))dlsym(RTLD_DEFAULT, "s2a_mac_front_layer"); });
      CAMetalLayer *l = f ? (__bridge CAMetalLayer *)f() : nil;
      if (l && l != set) {

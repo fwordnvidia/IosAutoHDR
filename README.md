@@ -8,7 +8,7 @@
 > smoothing stage derive two knee points, and the present shader expands everything above the knee toward the panel's
 > EDR headroom while keeping BT.2087 hue and paper-white luminance fixed. Nine C test suites (458 assertions),
 > a reference CLI plus 20 self-checks run on plain Linux — no Xcode, no device needed. Patch applies cleanly on
-> upstream `d5cbf7ff53f7` (2026-11-17). Everything is documented in Chinese; code identifiers and comments are bilingual
+> upstream `64ba1861c` (2026-11-19). Everything is documented in Chinese; code identifiers and comments are bilingual
 > enough to follow the math.
 >
 > **状态 / Status:** 算法层、C 侧接线、ObjC 语法闸门、上屏 MSL 编译均已通过；**未**做链接级与真机验证。
@@ -105,8 +105,12 @@ SpecialK / BT.2087 / BT.2408-8 / Apple EDR / Microsoft scRGB，每条都写「�
   （`ios/play_reflection.m` 152→64 行、`s2a_ios_reflection_drawable` 全树 0 命中）并去掉
   `present_encode_slot`/`_m4` 的 `mirror` 参数；`nvn_mtl.m` 3/9 hunk 冲突，工单 + 四处手工合并完成，
   同时把本补丁里那条改 `ios/play_reflection.m` 的 EDR 补丁**删掉**（载体没了）。
+- **2026-11-19**：`d5cbf7ff53f7` → `64ba1861cedebd`（**1186 个提交**），上游重构补帧为内联 Metal 4
+  `MTL4FXFrameInterpolator` + 两层运动矢量（`nvn_present_fi.inc` 重写）、合并官方 PR3a HDR 策略抽象
+  （`host_adapt.m` 新增 `nvn_hdr_policy.h` 与 `s2a_hdr_screen_publish`，`S2ARM_HDR` 缺省 `off`）、
+  上屏翻转改用 `present_ll()`（`nvn_mtl.m`）并更新 `Makefile` 头文件依赖；四处冲突全部按新架构合并完成。
 
-当前基线 d5cbf7ff53f7（`verify_upstream.sh` 全过）。上游仍在走，这是常态：**基线只对写明的那个提交成立**。
+当前基线 64ba1861cedebd（`verify_upstream.sh` 全过）。上游仍在走，这是常态：**基线只对写明的那个提交成立**。
 
 ## 合规（可验证，不是承诺）
 
@@ -124,7 +128,7 @@ SpecialK / BT.2087 / BT.2408-8 / Apple EDR / Microsoft scRGB，每条都写「�
 
 ## 打补丁
 
-目标基线：S2Arm `main` 的 **d5cbf7ff53f7**（`d5cbf7ff53f75b6132b17ce3a442d431bbbc8726`，2026-11-17；v0.4.0 `dcd05e5` 之后的提交；上一基线 `75eb430240da`、`0db515053e07` 的历史实测仍保留在 docs/PR.md）。
+目标基线：S2Arm `main` 的 **64ba1861cedebd**（`64ba1861cedebd244256c4bf8fa41340e8aa4a28`，2026-11-19；v0.4.0 `dcd05e5` 之后的提交；上一基线 `d5cbf7ff53f7`、`75eb430240da`、`0db515053e07` 的历史实测仍保留在 docs/PR.md）。
 注意上游 tag 仍停在 v0.4.0 而 `main` 已前进数百个提交，本补丁对**这一个提交**验证通过，上游再动需重跑 `./scripts/verify_upstream.sh <新 sha>`。
 0.4.0 上游**没有**任何 HDR 代码（`nvn_hdr*` 全缺、全树 `S2A_HDR` 零命中），所以这个补丁是纯新增。
 
@@ -136,7 +140,7 @@ SpecialK / BT.2087 / BT.2408-8 / Apple EDR / Microsoft scRGB，每条都写「�
 
 ```bash
 git clone https://github.com/jhaizhou-ops/S2Arm.git s2arm && cd s2arm
-git checkout d5cbf7ff53f75b6132b17ce3a442d431bbbc8726
+git checkout 64ba1861cedebd244256c4bf8fa41340e8aa4a28
 git apply -v /path/to/hdr-auto/patch/hdr-auto-l1.patch
 ```
 
@@ -174,7 +178,7 @@ vim src/nvn_hdr.h              # src/ 是唯一真相源
 ✓ t_hdr_robust：下标 / 空直方图 / uint32 溢出 / 垃圾上一帧状态 / 20 万次 fuzz 15 项 → 全过
 ```
 
-补丁本体：`patch/hdr-auto-l1.patch`，**42 文件 +7163 行**（−29），`sha256 735bce9384318f5520cb3003825f40f6ec71940d09259e1c51f4420574b1290f`。
+补丁本体：`patch/hdr-auto-l1.patch`，**42 文件 +7155 行**（−33），`sha256 8a34b1c0767be3f801a1dbabda41bc25ce73d3d5c4d8aef3434c3c44372132ce`。
 
 补丁同时修了一个会直接编译失败的缺口：`nvn_hdr_hist.inc` 要 `#include "nvn_hdr_hist_msl.h"`，而该基线的 `graphics/nvn/Makefile` 里**没有**生成它的规则（`GENH` 只列 `gal_tess_msl.h`）。补丁补上 `GENH` 条目与 `embed_msl.py` 规则，否则这条链路一被 include 就断。
 
@@ -183,7 +187,7 @@ vim src/nvn_hdr.h              # src/ 是唯一真相源
 | 项 | 状态 |
 |---|---|
 | 参数层（纯 C） | ✅ **912** 条断言（31 套）全绿，可在 Linux/CI 复跑；含四场景 nit 量化（`t_hdr_quality`） |
-| 补丁可打性 | ✅ 干净 `d5cbf7ff53f7` 树 `git apply` rc=0 |
+| 补丁可打性 | ✅ 干净 `64ba1861cedebd` 树 `git apply` rc=0 |
 | `hdr_hist.metal` 编译 | ✅ 这一个文件（`hdr_hist.metal`）过过 `xcrun -sdk iphoneos metal -std=metal3.0 -c` 编 `hdr_hist.metal`（第一次就抓出 MSL 里没有 `double`，已改 float）。**别的 MSL 不在这条里**，见下一行 |
 | 嵌入规则 | ✅ 本机 `embed_msl.py` 产出 7,756 B 头文件 |
 | GPU 侧接线 | ✅ `present_encode_slot` 每 8 帧（`S2A_HDR_HIST_EVERY`）跑 `clear→add→hdr_hist_l1` + blit 1 KB 直方图回 CPU；判定全在 CPU（真直方图），`float4` 只留作对账日志 |
@@ -350,7 +354,7 @@ python3 scripts/report.py     # 改完算法后重新生成
 ## 许可证
 
 本目录是 S2Arm（Apache-2.0）的**补丁与独立参考实现**，不含上游源码：`patch/hdr-auto-l1.patch`
-打在上游 `d5cbf7ff53f7` 的干净树上。见 [LICENSE](LICENSE) 与 [NOTICE](NOTICE)。
+打在上游 `64ba1861cedebd` 的干净树上。见 [LICENSE](LICENSE) 与 [NOTICE](NOTICE)。
 
 `.github/workflows/verify.yml` 是包内 CI：clone 上游干净树 → 跑全部闸门 → 再打补丁做
 **MSL 真编译 + 常数对账 + ObjC 语法检查**（本机 Ubuntu 做不到的三件事）。

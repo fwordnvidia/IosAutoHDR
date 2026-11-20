@@ -116,8 +116,12 @@ check("currentEDRHeadroom" in src and "maximumExtendedDynamicRangeColorComponent
       "nvn_mtl.m 每帧读真实屏幕 EDR 上界（UIScreen.currentEDRHeadroom / NSScreen.maximumExtendedDynamicRangeColorComponentValue）")
 check(contains(lines, "hdr_head_tick", "respondsToSelector")[0],
       "hdr_head_tick 读到之前先 respondsToSelector 守卫")
-check("EDRHeadroom" not in host and "maximumExtendedDynamicRange" not in host,
-      "host_adapt.m 不重复做 EDR 上界读数（单一真相源在 hdr_head_tick）")
+# 上游 PR1/PR3a（6831a0ce）在 host_adapt.m 的 front_metal_layer 中新增了官方 EDR 探针（potentialEDRHeadroom / currentEDRHeadroom）；
+# 这里精确守卫我们自己的 s2a_out_* 函数不重复做 EDR 上界读数（Auto-HDR 上界单一真相源在 nvn_mtl.m 的 hdr_head_tick）。
+out_layer_rng = func_range(read(HOST), "s2a_out_layer_hdr")
+out_layer_body = "\n".join(read(HOST)[out_layer_rng[0]:out_layer_rng[1] + 1]) if out_layer_rng else ""
+check(bool(out_layer_rng) and "EDRHeadroom" not in out_layer_body and "maximumExtendedDynamicRange" not in out_layer_body,
+      "host_adapt.m 的 s2a_out_layer_hdr 不重复做 EDR 上界读数（单一真相源在 hdr_head_tick）")
 
 # 7) 构建链：GENH 里嵌了直方图 MSL，且规则引用的两个文件真实存在
 mk = "\n".join(read(MK))
@@ -168,8 +172,9 @@ for needle, what in (
     (("float3 c = to_enc(src.read("), "down 的 luma 在编码域"),
     (("abs(to_enc(cur.read(gp).rgb, enc) - to_enc(prev.read(gp).rgb, enc)) < 0.004"), "spread 的静止判定在编码域"),
     (("uint32_t enc = (cur.pixelFormat == MTLPixelFormatRGBA16Float && f->in_linear) ? 1u : 0u;"), "dispatch 侧按源格式与线性标记设 enc"),
-    (("[en setBytes:&enc length:sizeof enc atIndex:0];"), "down 拿到 enc"),
-    (("[en setBytes:&enc length:sizeof enc atIndex:4];"), "spread 拿到 enc"),
+    (("a[17] = enc;"), "mvArgs 共享缓冲写入 enc（Metal 4 无 setBytes）"),
+    (("tab_buf(t, f->mvArgs, 68, 0);"), "down 拿到 enc（mvArgs offset 68 → buffer(0)）"),
+    (("tab_buf(t, f->mvArgs, 68, 4);"), "spread 拿到 enc（mvArgs offset 68 → buffer(4)）"),
 ):
     check(any(needle in ln for ln in fi_lines),
           "补帧运动估计按编码域标定：%s" % what,

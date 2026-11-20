@@ -1,4 +1,4 @@
-d5cbf7ff53f75b6132b17ce3a442d431bbbc8726 2026-11-17
+64ba1861cedebd244256c4bf8fa41340e8aa4a28 2026-11-19
 # 补丁的唯一基线提交：patch/hdr-auto-l1.patch 是对这个提交的 diff，`git apply` 在它上面 rc=0。
 # 上游比它新时不要直接 apply——先跑 ./scripts/rebase_patch.sh --head（成功给候选补丁并做往返验证，冲突则出工单）。
 # 改这一行要同时改 README「目标基线」与 docs/PR.md 头部，scripts/check_baseline.py 会核对三处。

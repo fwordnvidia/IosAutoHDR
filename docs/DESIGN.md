@@ -97,7 +97,7 @@ t_hdr_auto_l1 92 项 → 全过     # 白点 / 黑场 / 场景 / 边界
 t_hdr_pipeline 68 项 → 全过    # 端到端：合成帧、色相、峰值、稳态收敛
 ```
 
-在**干净的 `d5cbf7ff53f7` 树**上 `git apply` rc=0，三条全绿（见 `verify.sh`）。
+在**干净的 `64ba1861cedebd` 树**上 `git apply` rc=0，三条全绿（见 `verify.sh`）。
 
 ## 6.5 GPU 侧：L1 已经能用一条 kernel 算完
 

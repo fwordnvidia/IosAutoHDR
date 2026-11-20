@@ -14,7 +14,7 @@ body:
     attributes:
       label: 补丁基线
       description: 打补丁时用的上游提交。取 `patch/BASELINE` 第一列（或 `git -C <树> rev-parse HEAD`）。
-      placeholder: d5cbf7ff53f75b6132b17ce3a442d431bbbc8726
+      placeholder: 64ba1861cedebd244256c4bf8fa41340e8aa4a28
     validations:
       required: true
 

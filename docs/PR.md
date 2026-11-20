@@ -1,7 +1,7 @@
 # 给上游的 PR 说明（可直接粘贴）
 
 > 目标仓库：`jhaizhou-ops/S2Arm`（Apache-2.0）。本目录不是上游源码，而是**一个补丁包**：
-> `patch/hdr-auto-l1.patch` 基于 `main` 的 `d5cbf7ff53f75b6132b17ce3a442d431bbbc8726`（2026-11-17）制作。
+> `patch/hdr-auto-l1.patch` 基于 `main` 的 `64ba1861cedebd244256c4bf8fa41340e8aa4a28`（2026-11-19）制作。
 > 更早的版本基于 `v0.4.0`（`dcd05e5fa84c8c5c68b6ba66e3b1c6de016636ae`），基线迁移时把 8 处补帧改动
 > 重放到上游新版 `nvn_present_fi.inc` 与 `nvn_mtl.m`（上游在这两个文件里新增了 `fi_may_take_drawable()`、
 > `s2a_cpatch_present_aspect()` 自适应画幅等，共 256 行），重放后反向摘除逐字节还原为上游原文。
@@ -100,7 +100,21 @@ MSL kernel、ObjC `.inc` 这些只在设备上执行的代码，编译不进本�
 - 每帧开销：控制器一次调用 **0.57 µs**（30/60/120 Hz 相同），占 120 Hz 帧预算 0.007%；
 - 运行期 headroom：每帧读一次 EDR 上界（1% 死区），用户拖亮度/换屏后不再按旧 head 扩张。
 
-## 基线迁移（2026-11-17：`75eb4302` → `d5cbf7ff`，1082 个提交）
+## 基线迁移（2026-11-19：`d5cbf7ff` → `64ba1861c`，1186 个提交）
+
+本次为**结构性合并**，涉及四处上游既有文件：
+
+| 上游改动 | 我们要做的事 |
+| --- | --- |
+| `nvn_present_fi.inc` 重写为内联 Metal 4 补帧（`MTL4FXFrameInterpolator` + 2 槽 `in_tex[2]` + 两层运动矢量 + 切镜头 + `f->mvArgs` 替代 Metal 3 `setBytes`） | 按新 Metal 4 内联架构重写 16F 补帧适配：`fi_get` 先试 `RGBA16Float` 再回退 `BGRA8`、`in_tex`/`mid_tex`/`psoCopy` 跟随 `f->cfmt`、`f->uv` 扩为 16 float、`f->mvTab` 扩至 5 buffer 槽、编码域标志 `enc` 通过 `f->mvArgs` 偏移 68（`a[17]`）+ `tab_buf` 传入 `down`/`spread`、16F 画布下中间帧走 `present_blit_m4(..., NO, 1)` 并保留 `nil_dr` 退回守卫 |
+| `host_adapt.m` 合入官方 PR3a HDR 策略抽象（`nvn_hdr_policy.h`、`s2a_hdr_screen_publish`、`UIScreen` EDR 探针与 `layer_session_check`，`S2ARM_HDR` 缺省 `off`） | 完整保留上游 PR3a 逻辑，在其后插入 `s2a_out_*` 并在 iOS/Mac 两支调用；符号与当前运行期不冲突（上游 PR3b/PR4 尚未接管层） |
+| `nvn_mtl.m` 的 `present_encode_slot` / `present_encode_m4` 改用 `present_ll() != 0`（取代直接读 `g_origin_ll`） | 保留上游 `present_ll() != 0` 对齐两处上下文，其余 9 个 hunk 原样应用 |
+| `graphics/nvn/Makefile` 在 `HDRS :=` 后追加 `snapfmt.h` 等运行时头依赖 | 保留上游 `HDRS +=`，仅在 `GENH` 追加 `nvn_hdr_hist_msl.h` 及对应生成规则 |
+
+结果：补丁 **42 文件 / +7155 −33 行 / `sha256 8a34b1c0767be3f8…`**，`check_landing.py` 57/57、
+`check_callsites.py`（16 定义 / 60 调用点）、`check_format_assumptions.py` 13/13、`check_hdr_hooks.py` 10/10 全过。
+
+### 历史：2026-11-17 `75eb4302` → `d5cbf7ff`（1082 个提交）
 
 这次是**上游删功能**带来的合并，不是上下文漂移：
 
@@ -110,8 +124,7 @@ MSL kernel、ObjC `.inc` 这些只在设备上执行的代码，编译不进本�
 | `present_encode_slot` / `present_encode_m4` 去掉 `id<MTLTexture> mirror` 参数（上游不再向镜像层画第二遍） | 早退行里的 `&& (!mirror \|\| present_blit(…, mirror, …))` 去掉；`hdr_hist_tick`、`#include "nvn_hdr_hist.inc"`、`hdr_dst` 判定块按新结构重新插 |
 | `present_blit` / `present_blit_m4` 签名**未变**（仍带 `int screen`） | 两处 `hdr_head_tick();` 与所有调用点都不用动 |
 
-结果：补丁 **42 文件 / +7163 −29 行 / `sha256 735bce9384318f55…`**，`check_landing.py` 56/56、
-`check_callsites.py`（16 定义 / 63 调用点）、`check_format_assumptions.py` 13/13 全过。
+历史基线实测通过：42 文件 / +7163 −29 行 / `sha256 735bce9384318f55…`。
 
 ### 历史：2026-11-16 `0db51505` → `75eb4302`（371 个提交）
 

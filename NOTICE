@@ -3,7 +3,7 @@ Copyright 2026 the hdr-auto authors
 
 本目录是对 S2Arm（https://github.com/jhaizhou-ops/S2Arm ，Apache License 2.0）
 的**补丁与独立参考实现**，不含上游源码：`patch/hdr-auto-l1.patch` 需打在上游
-commit d5cbf7ff53f75b6132b17ce3a442d431bbbc8726（2026-11-17；v0.4.0 之后的提交）的干净树上。
+commit 64ba1861cedebd244256c4bf8fa41340e8aa4a28（2026-11-19；v0.4.0 之后的提交）的干净树上。
 基线只在 `patch/BASELINE` 里定义一处，本文件那个提交号由 `scripts/check_docs.py` 第 6 条核对。
 
 - 上游代码与其版权归 S2Arm 贡献者所有，见上游 LICENSE / NOTICE；

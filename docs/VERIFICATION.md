@@ -7,7 +7,7 @@
 
 ```bash
 ./run_all.sh                      # 不需要 S2Arm 树：自检 + 敏感度 + 曲线图
-./run_all.sh /tmp/v09             # 额外：把补丁打进干净 d5cbf7ff53f7 树跑 31 套单测（912 项）
+./run_all.sh /tmp/v09             # 额外：把补丁打进干净 64ba1861cedebd 树跑 31 套单测（912 项）
 ```
 
 `run_all.sh` 返回 0 才算通过。步骤：`0/5` 量化报告 → `1/5` 参考 CLI → `2/5` HUD 平台区 →
@@ -76,8 +76,8 @@ GNU patch 也不许报 `with fuzz`——fuzz 意味着上下文差几行它自�
 
 | 结论 | 命令 | 期望 |
 |---|---|---|
-| 补丁能在干净 `d5cbf7ff53f7` 上无冲突应用 | `git apply --check patch/hdr-auto-l1.patch`（在干净树） | 0 退出；42 个文件 |
-| 补丁文件指纹 | `sha256sum patch/hdr-auto-l1.patch` | `735bce93…`（42 文件，+7163 −29 行） |
+| 补丁能在干净 `64ba1861cedebd` 上无冲突应用 | `git apply --check patch/hdr-auto-l1.patch`（在干净树） | 0 退出；42 个文件 |
+| 补丁文件指纹 | `sha256sum patch/hdr-auto-l1.patch` | `8a34b1c0…`（42 文件，+7155 −33 行） |
 | MSL 能按 Makefile 规则嵌入 | `python3 graphics/metal/tools/embed_msl.py graphics/nvn/shaders/hdr_hist.metal k_hdr_hist out.h` | 7,948 B |
 
 上游跟随：`./scripts/check_upstream.sh` 会同时报**默认分支**与**最新 tag**，并以默认分支上能否干净打上为准
